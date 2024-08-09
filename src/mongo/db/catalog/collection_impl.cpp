@@ -574,6 +574,7 @@ bool CollectionImpl::requiresIdIndex() const {
 
 std::unique_ptr<SeekableRecordCursor> CollectionImpl::getCursor(OperationContext* opCtx,
                                                                 bool forward) const {
+    dassert(shard_role_details::getLocker(opCtx)->isReadLocked());
     if (usesCappedSnapshots() && forward) {
         if (shard_role_details::getRecoveryUnit(opCtx)->isActive()) {
             auto snapshot =
@@ -1614,18 +1615,15 @@ Status CollectionImpl::prepareForIndexBuild(OperationContext* opCtx,
               str::stream() << "index " << imd.nameStringData()
                             << " is already in current metadata: " << _metadata->toBSON());
 
-    if (getTimeseriesOptions() &&
+    if (getTimeseriesBucketsMayHaveMixedSchemaData() &&
         timeseries::doesBucketsIndexIncludeMeasurement(
             opCtx, ns(), *getTimeseriesOptions(), spec->infoObj())) {
-        invariant(_metadata->timeseriesBucketsMayHaveMixedSchemaData);
-        if (*_metadata->timeseriesBucketsMayHaveMixedSchemaData) {
-            LOGV2(6057502,
-                  "Detected that this time-series collection may have mixed-schema data. "
-                  "Attempting to build the index.",
-                  logAttrs(ns()),
-                  logAttrs(uuid()),
-                  "spec"_attr = spec->infoObj());
-        }
+        LOGV2(6057502,
+              "Detected that this time-series collection may have mixed-schema data. "
+              "Attempting to build the index.",
+              logAttrs(ns()),
+              logAttrs(uuid()),
+              "spec"_attr = spec->infoObj());
     }
 
     _writeMetadata(
