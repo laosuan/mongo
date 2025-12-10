@@ -69,6 +69,7 @@ public:
      */
     SamplingEstimatorImpl(OperationContext* opCtx,
                           const MultipleCollectionAccessor& collections,
+                          const NamespaceString& nss,
                           PlanYieldPolicy::YieldPolicy yieldPolicy,
                           SamplingStyle samplingStyle,
                           CardinalityEstimate collectionCard,
@@ -84,6 +85,7 @@ public:
      */
     SamplingEstimatorImpl(OperationContext* opCtx,
                           const MultipleCollectionAccessor& collections,
+                          const NamespaceString& nss,
                           PlanYieldPolicy::YieldPolicy yieldPolicy,
                           size_t sampleSize,
                           SamplingStyle samplingStyle,
@@ -240,6 +242,10 @@ public:
         }
     }
 
+    double getCollCard() const override {
+        return _collectionCard.toDouble();
+    }
+
 protected:
     /*
      * This helper creates a CanonicalQuery for the sampling plan. This CanonicalQuery is “empty”
@@ -249,10 +255,6 @@ protected:
      */
     static std::unique_ptr<CanonicalQuery> makeEmptyCanonicalQuery(const NamespaceString& nss,
                                                                    OperationContext* opCtx);
-
-    double getCollCard() const {
-        return _collectionCard.cardinality().v();
-    }
 
     /*
      * The sample size is calculated based on the confidence level and margin of error(MoE)
@@ -348,6 +350,7 @@ private:
     // The collection the sampling plan runs against and is the one accessed by the query being
     // optimized.
     const MultipleCollectionAccessor& _collections;
+    NamespaceString _nss;
     PlanYieldPolicy::YieldPolicy _yieldPolicy;
     SamplingStyle _samplingStyle;
     size_t _sampleSize;

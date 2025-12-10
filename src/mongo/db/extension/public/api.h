@@ -147,7 +147,14 @@ typedef struct MongoExtensionStatusVTable {
     /**
      * Set a reason associated with `status`. May be empty.
      */
-    void (*set_reason)(MongoExtensionStatus* status, MongoExtensionByteView newReason);
+    MongoExtensionStatus* (*set_reason)(MongoExtensionStatus* status,
+                                        MongoExtensionByteView newReason);
+
+    /**
+     * Clone this instance of MongoExtensionStatus.
+     */
+    MongoExtensionStatus* (*clone)(const MongoExtensionStatus* status,
+                                   MongoExtensionStatus** output);
 } MongoExtensionStatusVTable;
 
 /**
@@ -455,6 +462,9 @@ typedef enum MongoExtensionDPLArrayElementType : uint32_t {
 /**
  * MongoExtensionDPLArrayElement represents a single element in a MongoExtensionDPLArray. Each
  * element can be either a parse node or a logical stage.
+ *
+ * If an element is a logical stage, it must be the same stage type as the logical stage that
+ * generated it.
  */
 typedef struct MongoExtensionDPLArrayElement {
     // Indicates what type the element is.
