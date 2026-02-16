@@ -47,7 +47,9 @@ public:
     /**
      * We do not have any additional WT config to add.
      */
-    std::string getWiredTigerConfig() const override;
+    std::string getWiredTigerConfig(bool wtInMemory,
+                                    bool wtLogEnabled,
+                                    const std::string& wtLogCompressor) const override;
 
     /**
      * No additional settings required by the provider for tables from the main WiredTiger storage

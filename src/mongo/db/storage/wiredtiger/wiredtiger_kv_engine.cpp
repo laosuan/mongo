@@ -368,22 +368,6 @@ std::string generateWTOpenConfigString(const WiredTigerKVEngineBase::WiredTigerC
     ss << "config_base=false,";
     ss << "statistics=(" << wtConfig.statisticsSetting << "),";
 
-    // TODO: SERVER-109794 move this block into the corresponding persistence providers.
-    if (wtConfig.inMemory) {
-        invariant(!wtConfig.logEnabled);
-        // If we've requested an ephemeral instance we store everything into memory instead of
-        // backing it onto disk. Logging is not supported in this instance, thus we also have to
-        // disable it.
-        ss << "in_memory=true,log=(enabled=false),";
-    } else {
-        if (wtConfig.logEnabled) {
-            ss << "log=(enabled=true,remove=true,path=journal,compressor=";
-            ss << wtConfig.logCompressor << "),";
-        } else {
-            ss << "log=(enabled=false),";
-        }
-    }
-
     ss << providerConfig;
 
     ss << "builtin_extension_config=(zstd=(compression_level=" << wtConfig.zstdCompressorLevel
@@ -689,7 +673,10 @@ WiredTigerKVEngine::WiredTigerKVEngine(const std::string& canonicalName,
     }
 
     std::string config = generateWTOpenConfigString(
-        _wtConfig, wtExtensions.getOpenExtensionsConfig(), provider.getWiredTigerConfig());
+        _wtConfig,
+        wtExtensions.getOpenExtensionsConfig(),
+        provider.getWiredTigerConfig(
+            _wtConfig.inMemory, _wtConfig.logEnabled, _wtConfig.logCompressor));
     LOGV2(22315, "Opening WiredTiger", "config"_attr = config);
 
     auto startTime = Date_t::now();

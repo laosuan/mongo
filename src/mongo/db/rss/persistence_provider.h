@@ -71,7 +71,9 @@ public:
      * Additional configuration that should be added to the WiredTiger config string for the
      * 'wiredtiger_open' call.
      */
-    virtual std::string getWiredTigerConfig() const = 0;
+    virtual std::string getWiredTigerConfig(bool wtInMemory,
+                                            bool wtLogEnabled,
+                                            const std::string& wtLogCompressor) const = 0;
 
     /**
      * Additional configuration that should be added to the WiredTiger config string for creating a
