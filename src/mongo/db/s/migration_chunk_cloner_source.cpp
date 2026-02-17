@@ -191,16 +191,17 @@ LogTransactionOperationsForShardingHandler::LogTransactionOperationsForShardingH
       _stmts(stmts),
       _prepareOrCommitOpTime(std::move(prepareOrCommitOpTime)) {}
 
-void LogTransactionOperationsForShardingHandler::commit(OperationContext* opCtx,
-                                                        boost::optional<Timestamp>) noexcept {
+void LogTransactionOperationsForShardingHandler::commit(
+    OperationContext* opCtx, boost::optional<Timestamp> commitTimestamp) noexcept {
     std::set<NamespaceString> namespacesTouchedByTransaction;
 
     // Inform the session migration subsystem that a transaction has committed for the given
     // namespace.
     auto addToSessionMigrationOptimeQueueIfNeeded =
-        [&namespacesTouchedByTransaction, lsid = _lsid](MigrationChunkClonerSource* const cloner,
-                                                        const NamespaceString& nss,
-                                                        const repl::OpTime opTime) {
+        [&namespacesTouchedByTransaction, lsid = _lsid, commitTimestamp](
+            MigrationChunkClonerSource* const cloner,
+            const NamespaceString& nss,
+            const repl::OpTime opTime) {
             if (isInternalSessionForNonRetryableWrite(lsid)) {
                 // Transactions inside internal sessions for non-retryable writes are not
                 // retryable so there is no need to transfer the write history to the
@@ -208,8 +209,10 @@ void LogTransactionOperationsForShardingHandler::commit(OperationContext* opCtx,
                 return;
             }
             if (namespacesTouchedByTransaction.find(nss) == namespacesTouchedByTransaction.end()) {
-                cloner->_addToSessionMigrationOptimeQueue(
-                    opTime, SessionCatalogMigrationSource::EntryAtOpTimeType::kTransaction);
+                cloner->_addToSessionMigrationQueue(
+                    {opTime,
+                     SessionCatalogMigrationSource::EntryAtOpTimeType::kTransaction,
+                     commitTimestamp});
 
                 namespacesTouchedByTransaction.emplace(nss);
             }
@@ -595,11 +598,10 @@ void MigrationChunkClonerSource::onDeleteOp(OperationContext* opCtx,
     _decrementOutstandingOperationTrackRequests();
 }
 
-void MigrationChunkClonerSource::_addToSessionMigrationOptimeQueue(
-    const repl::OpTime& opTime,
-    SessionCatalogMigrationSource::EntryAtOpTimeType entryAtOpTimeType) {
-    if (!opTime.isNull()) {
-        _sessionCatalogSource->notifyNewWriteOpTime(opTime, entryAtOpTimeType);
+void MigrationChunkClonerSource::_addToSessionMigrationQueue(
+    SessionCatalogMigrationSource::OpTimeBundle opTimeBundle) {
+    if (!opTimeBundle.opTime.isNull()) {
+        _sessionCatalogSource->notifyNewWriteOpTime(opTimeBundle);
     }
 }
 
@@ -626,8 +628,8 @@ void MigrationChunkClonerSource::_addToTransferModsQueue(const BSONObj& idObj,
             MONGO_UNREACHABLE;
     }
 
-    _addToSessionMigrationOptimeQueue(
-        opTime, SessionCatalogMigrationSource::EntryAtOpTimeType::kRetryableWrite);
+    _addToSessionMigrationQueue(
+        {opTime, SessionCatalogMigrationSource::EntryAtOpTimeType::kRetryableWrite});
 }
 
 bool MigrationChunkClonerSource::_addedOperationToOutstandingOperationTrackRequests() {
@@ -1624,8 +1626,8 @@ void LogRetryableApplyOpsForShardingHandler::commit(OperationContext* opCtx,
         auto cloner = MigrationSourceManager::getCurrentCloner(*scopedCss);
         if (cloner) {
             for (const auto& opTime : _opTimes) {
-                cloner->_addToSessionMigrationOptimeQueue(
-                    opTime, SessionCatalogMigrationSource::EntryAtOpTimeType::kRetryableWrite);
+                cloner->_addToSessionMigrationQueue(
+                    {opTime, SessionCatalogMigrationSource::EntryAtOpTimeType::kRetryableWrite});
             }
         }
     }
