@@ -398,9 +398,11 @@ DumpGlobalServiceContext()
 
 class GetMongoDecoration(gdb.Command):
     """
-    Search for a decoration on an object by typename and print it e.g.
+    Search for a decoration on an object by typename and print it.
 
-    (gdb) mongodb-decoration opCtx ReadConcernArgs
+    Example: if opCtx is a pointer to mongo::OperationContext,
+
+    (gdb) mongodb-decoration *opCtx ReadConcernArgs
 
     would print out a decoration on opCtx whose type name contains the string "ReadConcernArgs".
     """
