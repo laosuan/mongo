@@ -512,13 +512,6 @@ Status WiredTigerKVEngineBase::insertIntoIdent(RecoveryUnit& ru,
     c->set_value(c, WiredTigerItem{value}.get());
 
     int rc = WT_OP_CHECK(wiredTigerCursorInsert(wtRu, c));
-    if (rc == WT_DUPLICATE_KEY)
-        // TODO (SERVER-109707): Find (or create) a new way to represent the case of a duplicate
-        // key.
-        return Status{
-            DuplicateKeyErrorInfo(BSONObj(), BSONObj(), BSONObj(), std::monostate(), boost::none),
-            "Key already exists in ident"};
-
     return wtRCToStatus(rc, cursor->session);
 }
 
