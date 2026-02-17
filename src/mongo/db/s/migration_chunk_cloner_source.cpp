@@ -329,6 +329,8 @@ Status MigrationChunkClonerSource::startClone(OperationContext* opCtx,
     // Prime up the session migration source if there are oplog entries to migrate.
     _sessionCatalogSource->fetchNextOplog(opCtx);
 
+    _migrationId = migrationId;
+
     {
         // Ignore prepare conflicts when we load ids of currently available documents. This is
         // acceptable because we will track changes made by prepared transactions at transaction
@@ -363,7 +365,7 @@ Status MigrationChunkClonerSource::startClone(OperationContext* opCtx,
 
     StartChunkCloneRequest::appendAsCommand(&cmdBuilder,
                                             nss(),
-                                            migrationId,
+                                            *_migrationId,
                                             lsid,
                                             txnNumber,
                                             _sessionId,
@@ -472,7 +474,8 @@ void MigrationChunkClonerSource::cancelClone(OperationContext* opCtx) {
                 LOGV2(21991,
                       "Failed to cancel migration",
                       "error"_attr = redact(status),
-                      logAttrs(nss()));
+                      logAttrs(nss()),
+                      "migrationId"_attr = _migrationId);
             }
             [[fallthrough]];
         }
@@ -495,7 +498,8 @@ void MigrationChunkClonerSource::onInsertOp(OperationContext* opCtx,
                       "logInsertOp received a document without an _id field and will ignore that "
                       "document",
                       "insertedDoc"_attr = redact(insertedDoc),
-                      logAttrs(nss()));
+                      logAttrs(nss()),
+                      "migrationId"_attr = _migrationId);
         return;
     }
 
@@ -523,7 +527,8 @@ void MigrationChunkClonerSource::onUpdateOp(OperationContext* opCtx,
             21996,
             "logUpdateOp received a document without an _id field and will ignore that document",
             "postImageDoc"_attr = redact(postImageDoc),
-            logAttrs(nss()));
+            logAttrs(nss()),
+            "migrationId"_attr = _migrationId);
         return;
     }
 
@@ -560,7 +565,8 @@ void MigrationChunkClonerSource::onDeleteOp(OperationContext* opCtx,
             21997,
             "logDeleteOp received a document without an _id field and will ignore that document",
             "deletedDocShardKeyAndId"_attr = redact(shardKeyAndId),
-            logAttrs(nss()));
+            logAttrs(nss()),
+            "migrationId"_attr = _migrationId);
         return;
     }
 
@@ -569,7 +575,8 @@ void MigrationChunkClonerSource::onDeleteOp(OperationContext* opCtx,
                       "logDeleteOp received a document without the shard key field and will ignore "
                       "that document",
                       "deletedDocShardKeyAndId"_attr = redact(shardKeyAndId),
-                      logAttrs(nss()));
+                      logAttrs(nss()),
+                      "migrationId"_attr = _migrationId);
         return;
     }
 
@@ -1243,6 +1250,7 @@ Status MigrationChunkClonerSource::_checkRecipientCloningStatus(OperationContext
                   "moveChunk data transfer progress",
                   "response"_attr = redact(res),
                   logAttrs(nss()),
+                  "migrationId"_attr = _migrationId,
                   "memoryUsedBytes"_attr = _memoryUsed,
                   "docsCloned"_attr = _jumboChunkCloneState->docsCloned,
                   "untransferredModsSizeBytes"_attr = untransferredModsSizeBytes,
@@ -1253,6 +1261,7 @@ Status MigrationChunkClonerSource::_checkRecipientCloningStatus(OperationContext
                   "moveChunk data transfer progress",
                   "response"_attr = redact(res),
                   logAttrs(nss()),
+                  "migrationId"_attr = _migrationId,
                   "memoryUsedBytes"_attr = _memoryUsed,
                   "docsRemainingToClone"_attr =
                       _cloneList.size() - _numRecordsCloned - _numRecordsPassedOver,
@@ -1302,6 +1311,7 @@ Status MigrationChunkClonerSource::_checkRecipientCloningStatus(OperationContext
                 LOGV2(5630700,
                       "moveChunk data transfer within threshold to allow write blocking",
                       logAttrs(nss()),
+                      "migrationId"_attr = _migrationId,
                       "_untransferredUpsertsCounter"_attr = _untransferredUpsertsCounter,
                       "_untransferredDeletesCounter"_attr = _untransferredDeletesCounter,
                       "_deferredUntransferredOpsCounter"_attr = _deferredUntransferredOpsCounter,

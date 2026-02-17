@@ -788,6 +788,9 @@ private:
     // Set only once its discovered a chunk is jumbo
     boost::optional<JumboChunkCloneState> _jumboChunkCloneState;
 
+    // MigrationId available once startClone is called
+    boost::optional<UUID> _migrationId;
+
 protected:
     MigrationChunkClonerSource();
 };
