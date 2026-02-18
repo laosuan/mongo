@@ -30,6 +30,7 @@
 #include "mongo/db/change_stream_pre_images_truncate_markers.h"
 
 #include "mongo/db/admission/execution_control/execution_admission_context.h"
+#include "mongo/db/change_stream_pre_image_id_util.h"
 #include "mongo/db/change_stream_pre_image_util.h"
 #include "mongo/db/change_stream_pre_images_truncate_markers_per_nsUUID.h"
 #include "mongo/db/collection_crud/collection_write_path.h"
@@ -74,6 +75,24 @@ std::unique_ptr<SeekableRecordCursor> getCursor(OperationContext* opCtx,
     return rs->getCursor(opCtx, *shard_role_details::getRecoveryUnit(opCtx), forward);
 }
 
+// Returns true if there are no pre-images for given 'uuid'.
+bool hasNoPreimages(OperationContext* opCtx,
+                    const CollectionAcquisition& preImagesCollection,
+                    const UUID& uuid) {
+    auto cursor = getCursor(opCtx, preImagesCollection, true /*forward*/);
+    RecordId start =
+        change_stream_pre_image_id_util::getAbsoluteMinPreImageRecordIdBoundForNs(uuid).recordId();
+
+    auto seekedRecord = cursor->seek(start, SeekableRecordCursor::BoundInclusion::kInclude);
+    if (!seekedRecord) {
+        return true;
+    }
+
+    auto seekedRecordUUID =
+        change_stream_pre_image_id_util::getPreImageNsUUID(seekedRecord->data.toBson());
+    return seekedRecordUUID != uuid;
+}
+
 // Acquires the pre-images collection given 'nsOrUUID'. When provided a UUID, throws
 // NamespaceNotFound if the collection is dropped.
 auto acquirePreImagesCollectionForRead(OperationContext* opCtx, const UUID& uuid) {
@@ -103,28 +122,6 @@ auto acquirePreImagesCollectionForWrite(OperationContext* opCtx, const UUID& uui
         MODE_IX);
 }
 
-// Truncate ranges must be consistent data - no record within a truncate range should be written
-// after the truncate. Otherwise, the data viewed by an open change stream could be corrupted,
-// only seeing part of the range post truncate. The node can either be a secondary or primary at
-// this point. Restrictions must be in place to ensure consistent ranges in both scenarios.
-//      - Primaries can't truncate past the 'allDurable' Timestamp. 'allDurable'
-//      guarantees out-of-order writes on the primary don't leave oplog holes.
-//
-//      - Secondaries can't truncate past the 'lastApplied' timestamp. Within an oplog batch,
-//      entries are applied out of order, thus truncate markers may be created before the entire
-//      batch is finished.
-//      The 'allDurable' Timestamp is not sufficient given it is computed from within WT, which
-//      won't always know there are entries with opTime < 'allDurable' which have yet to enter
-//      the storage engine during secondary oplog application.
-//
-// Returns the maximum 'ts' a pre-image is allowed to have in order to be safely truncated.
-Timestamp getMaxTSEligibleForTruncate(OperationContext* opCtx) {
-    Timestamp allDurable =
-        Timestamp(opCtx->getServiceContext()->getStorageEngine()->getAllDurableTimestamp());
-    auto lastAppliedOpTime = repl::ReplicationCoordinator::get(opCtx)->getMyLastAppliedOpTime();
-    return std::min(lastAppliedOpTime.getTimestamp(), allDurable);
-}
-
 // Performs a ranged truncate over each expired marker in 'truncateMarkersForNsUUID'. Updates the
 // "Output" parameters to communicate the respective docs deleted, bytes deleted, and and maximum
 // wall time of documents deleted to the caller.
@@ -139,7 +136,7 @@ void truncateExpiredMarkersForNsUUID(
     int64_t& totalBytesDeletedOutput,
     Date_t& maxWallTimeForNsTruncateOutput) {
     while (auto marker = truncateMarkersForNsUUID->peekOldestMarkerIfNeeded(opCtx)) {
-        if (change_stream_pre_image_util::getPreImageTimestamp(marker->lastRecord) >
+        if (change_stream_pre_image_id_util::getPreImageTimestamp(marker->lastRecord) >
             maxTSEligibleForTruncate) {
             // The truncate marker contains pre-images part of a data range not yet consistent
             // (i.e. there could be oplog holes or partially applied ranges of the oplog in the
@@ -194,9 +191,9 @@ void sampleRangeEquallyWithCursor(SeekableRecordCursor& cursor,
 
     // Convert lowest and highest values into uint128_t values, for easy arithmetic.
     const auto lowest =
-        change_stream_pre_image_util::timestampAndApplyOpsIndexToNumber(firstRidAndWall.id);
+        change_stream_pre_image_id_util::timestampAndApplyOpsIndexToNumber(firstRidAndWall.id);
     const auto highest =
-        change_stream_pre_image_util::timestampAndApplyOpsIndexToNumber(lastRidAndWall.id);
+        change_stream_pre_image_id_util::timestampAndApplyOpsIndexToNumber(lastRidAndWall.id);
     invariant(lowest <= highest);
 
     const auto distance = highest - lowest;
@@ -214,10 +211,10 @@ void sampleRangeEquallyWithCursor(SeekableRecordCursor& cursor,
 
     while (current < highest && samples.size() < numSamples) {
         auto [currentTs, currentApplyOpsIndex] =
-            change_stream_pre_image_util::timestampAndApplyOpsIndexFromNumber(current);
+            change_stream_pre_image_id_util::timestampAndApplyOpsIndexFromNumber(current);
 
         RecordId seekTo =
-            change_stream_pre_image_util::getPreImageRecordIdForNsTimestampApplyOpsIndex(
+            change_stream_pre_image_id_util::getPreImageRecordIdForNsTimestampApplyOpsIndex(
                 nsUUID, currentTs /* timestamp */, currentApplyOpsIndex /* applyOpsIndex */)
                 .recordId();
 
@@ -241,7 +238,7 @@ void sampleRangeEquallyWithCursor(SeekableRecordCursor& cursor,
 
         const BSONObj preImageObj = record->data.toBson();
 
-        if (nsUUID != change_stream_pre_image_util::getPreImageNsUUID(preImageObj)) {
+        if (nsUUID != change_stream_pre_image_id_util::getPreImageNsUUID(preImageObj)) {
             // Record is already for a different 'nsUUID' value. Abort sampling.
             // We should not get here, because the current record id compared different to the
             // maximum record id we expect for the 'nsUUID' value. However, this is left as a
@@ -258,9 +255,9 @@ void sampleRangeEquallyWithCursor(SeekableRecordCursor& cursor,
         // larger than the Timestamp for the next planned step, we can as well bump it up to what we
         // just read plus the step size. That way we can avoid reading the same records again if
         // they are farther apart than the step size.
-        current =
-            std::max(current,
-                     change_stream_pre_image_util::timestampAndApplyOpsIndexToNumber(record->id)) +
+        current = std::max(current,
+                           change_stream_pre_image_id_util::timestampAndApplyOpsIndexToNumber(
+                               record->id)) +
             stepSize;
     }
 }
@@ -326,7 +323,7 @@ int64_t countTotalSamples(const SamplesMap& samplesMap) {
 }
 
 void appendSample(const BSONObj& preImageObj, const RecordId& rId, SamplesMap& samplesMap) {
-    const auto uuid = change_stream_pre_image_util::getPreImageNsUUID(preImageObj);
+    const auto uuid = change_stream_pre_image_id_util::getPreImageNsUUID(preImageObj);
     const auto wallTime = PreImagesTruncateMarkersPerNsUUID::getWallTime(preImageObj);
     const auto ridAndWall = RecordIdAndWallTime{rId, wallTime};
 
@@ -368,7 +365,7 @@ std::vector<RecordIdAndWallTime> sampleNSUUIDRangeEqually(
         // Seek to lowest possible entry for this 'nsUUID' value, i.e. the one with timestamp 0 and
         // applyOpsIndex 0.
         RecordId seekTo =
-            change_stream_pre_image_util::getAbsoluteMinPreImageRecordIdBoundForNs(nsUUID)
+            change_stream_pre_image_id_util::getAbsoluteMinPreImageRecordIdBoundForNs(nsUUID)
                 .recordId();
 
         boost::optional<Record> record =
@@ -380,7 +377,7 @@ std::vector<RecordIdAndWallTime> sampleNSUUIDRangeEqually(
         const auto firstRidAndWall =
             PreImagesTruncateMarkersPerNsUUID::getRecordIdAndWallTime(*record);
         const BSONObj preImageObj = record->data.toBson();
-        invariant(nsUUID == change_stream_pre_image_util::getPreImageNsUUID(preImageObj));
+        invariant(nsUUID == change_stream_pre_image_id_util::getPreImageNsUUID(preImageObj));
 
         if (firstRidAndWall.id != lastRidAndWall.id) {
             // The record we just read is not identical to the record with the highest Timestamp for
@@ -414,7 +411,7 @@ std::vector<RecordIdAndWallTime> sampleNSUUIDRangeEqually(
         "samples"_attr = [&]() {
             std::vector<Timestamp> ret;
             for (const auto& s : samples) {
-                ret.push_back(change_stream_pre_image_util::getPreImageTimestamp(s.id));
+                ret.push_back(change_stream_pre_image_id_util::getPreImageTimestamp(s.id));
             }
             return ret;
         }());
@@ -440,12 +437,13 @@ stdx::unordered_map<UUID, RecordIdAndWallTime, UUID::Hash> sampleLastRecordPerNs
 
     while (record) {
         // As a reverse cursor, the first record we see for a namespace is the highest.
-        UUID currentNsUUID = change_stream_pre_image_util::getPreImageNsUUID(record->data.toBson());
+        UUID currentNsUUID =
+            change_stream_pre_image_id_util::getPreImageNsUUID(record->data.toBson());
         auto sample = PreImagesTruncateMarkersPerNsUUID::getRecordIdAndWallTime(*record);
         lastRecords.insert({currentNsUUID, std::move(sample)});
 
         RecordId minRecordIdForCurrentNsUUID =
-            change_stream_pre_image_util::getAbsoluteMinPreImageRecordIdBoundForNs(currentNsUUID)
+            change_stream_pre_image_id_util::getAbsoluteMinPreImageRecordIdBoundForNs(currentNsUUID)
                 .recordId();
 
         // A reverse exclusive 'seek' will return the previous entry in the collection. This should
@@ -455,7 +453,7 @@ stdx::unordered_map<UUID, RecordIdAndWallTime, UUID::Hash> sampleLastRecordPerNs
                               SeekableRecordCursor::BoundInclusion::kExclude);
         invariant(!record ||
                   currentNsUUID !=
-                      change_stream_pre_image_util::getPreImageNsUUID(record->data.toBson()));
+                      change_stream_pre_image_id_util::getPreImageNsUUID(record->data.toBson()));
     }
     return lastRecords;
 }
@@ -880,7 +878,8 @@ PreImagesTruncateStats PreImagesTruncateMarkers::truncateExpiredPreImages(Operat
     // However, pre-images with 'ts' > 'maxTSEligibleForTruncate' are unsafe to truncate, as there
     // may be oplog holes or inconsistent data prior to it. Compute the value once, as it requires
     // making an additional call into the storage engine.
-    Timestamp maxTSEligibleForTruncate = getMaxTSEligibleForTruncate(opCtx);
+    Timestamp maxTSEligibleForTruncate =
+        change_stream_pre_image_id_util::getMaxTSEligibleForTruncate(opCtx);
     stats.maxTimestampEligibleForTruncate = maxTSEligibleForTruncate;
 
     // Truncate markers can be generated with data that is later rolled back via rollback-to-stable.
@@ -897,7 +896,7 @@ PreImagesTruncateStats PreImagesTruncateMarkers::truncateExpiredPreImages(Operat
     //      and re-inserted into truncate markers (mirroring truncate behavior in a stable state).
     for (auto& [nsUUID, truncateMarkersForNsUUID] : *markersMapSnapshot) {
         RecordId minRecordId =
-            change_stream_pre_image_util::getAbsoluteMinPreImageRecordIdBoundForNs(nsUUID)
+            change_stream_pre_image_id_util::getAbsoluteMinPreImageRecordIdBoundForNs(nsUUID)
                 .recordId();
 
         int64_t docsDeletedForNs = 0;
@@ -939,8 +938,11 @@ PreImagesTruncateStats PreImagesTruncateMarkers::truncateExpiredPreImages(Operat
         if (CollectionCatalog::get(opCtx)->lookupCollectionByUUID(opCtx, nsUUID) == nullptr &&
             truncateMarkersForNsUUID->isEmpty()) {
 
+            // Truncate all pre-images for the given collection, while using the largest timestamp
+            // that is still eligible for truncation.
             RecordId maxRecordId =
-                change_stream_pre_image_util::getAbsoluteMaxPreImageRecordIdBoundForNs(nsUUID)
+                change_stream_pre_image_id_util::getPreImageRecordIdForNsTimestampApplyOpsIndex(
+                    nsUUID, maxTSEligibleForTruncate, std::numeric_limits<int64_t>::max())
                     .recordId();
 
             writeConflictRetry(opCtx, "final truncate", preImagesColl->ns(), [&] {
@@ -951,6 +953,10 @@ PreImagesTruncateStats PreImagesTruncateMarkers::truncateExpiredPreImages(Operat
                 wuow.commit();
             });
 
+            // All pre-images for the dropped collection must be deleted by this point, as
+            // collection drop must appear before 'maxTSEligibleForTruncate'. However, we introduce
+            // additional dassert() to ensure we erase the marker only when all preimages are gone.
+            dassert(hasNoPreimages(opCtx, preImagesCollection, nsUUID));
             _markersMap.erase(nsUUID);
         }
     }
