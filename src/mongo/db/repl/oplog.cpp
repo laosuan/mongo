@@ -64,6 +64,7 @@
 #include "mongo/db/query/write_ops/update_request.h"
 #include "mongo/db/query/write_ops/update_result.h"
 #include "mongo/db/query/write_ops/write_ops_parsers.h"
+#include "mongo/db/repl/always_allow_non_local_writes.h"
 #include "mongo/db/repl/apply_ops.h"
 #include "mongo/db/repl/create_oplog_entry_gen.h"
 #include "mongo/db/repl/dbcheck/dbcheck.h"
@@ -571,22 +572,17 @@ OpTime logOp(OperationContext* opCtx, MutableOplogEntry* oplogEntry) {
         // Declaring Write intent ensures we are the primary node and this operation will be
         // interrupted by StepDown. Only a primary node should be able to allocate optimes for new
         // entries in the oplog.
-        // TODO SERVER-118511 make this function throw if write intent is not declared for this
-        // opCtx.
         boost::optional<rss::consensus::WriteIntentGuard> writeGuard;
         if (gFeatureFlagIntentRegistration.isEnabled() &&
             !rss::consensus::IntentRegistry::get(opCtx->getServiceContext())
-                 .hasWriteIntentDeclared(opCtx)) {
-            try {
-                writeGuard.emplace(opCtx);
-            } catch (const DBException& ex) {
-                printStackTrace();
-                LOGV2_ERROR(11006000,
-                            "Could not acquire write intent when trying to reserve optime",
-                            "opCtx"_attr = opCtx->getOpID(),
-                            "reason"_attr = ex.toStatus());
-                throw;
-            }
+                 .hasWriteIntentDeclared(opCtx) &&
+            !replCoord->isOplogDisabledFor(opCtx, oplogEntry->getNss()) &&
+            !alwaysAllowNonLocalWrites(opCtx)) {
+            printStackTrace();
+            LOGV2_ERROR(11006000,
+                        "Could not acquire write intent when trying to reserve optime",
+                        "opCtx"_attr = opCtx->getOpID(),
+                        "oplogEntry"_attr = oplogEntry->toBSON());
         }
 
         slot = oplogInfo->getNextOpTimes(opCtx, 1U)[0];
