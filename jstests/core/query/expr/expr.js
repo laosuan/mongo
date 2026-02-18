@@ -24,6 +24,7 @@
 import "jstests/libs/query/sbe_assert_error_override.js";
 
 import {getExecutionStats} from "jstests/libs/query/analyze_plan.js";
+import {add2dsphereVersionIfNeeded} from "jstests/libs/query/geo_index_version_helpers.js";
 
 const coll = db.expr;
 
@@ -196,7 +197,7 @@ assert.throws(function () {
 
 coll.drop();
 assert.commandWorked(coll.insert({geo: {type: "Point", coordinates: [0, 0]}, a: 0}));
-assert.commandWorked(coll.createIndex({geo: "2dsphere"}));
+assert.commandWorked(coll.createIndex({geo: "2dsphere"}, add2dsphereVersionIfNeeded()));
 assert.eq(
     1,
     coll
