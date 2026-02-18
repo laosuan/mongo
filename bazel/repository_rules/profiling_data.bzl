@@ -1,10 +1,10 @@
 # This file gets automatically updated by profile_data_pr.py. Do not change the path to this file or variables in this file
 # without updating that script.
-DEFAULT_CLANG_PGO_DATA_URL = "https://mdb-build-public.s3.us-east-1.amazonaws.com/profiling_data/pgo/mongod_b133e06054f27a616834d38f5fdaae0b8c8d0362_aarch64_clang_thinlto_pgo_8.3.0-rc1000-83-gb133e06-patch-699299bda533ef0007199b94.profdata"
-DEFAULT_CLANG_PGO_DATA_CHECKSUM = "d56a83dbb2cb1d8fc09f830720e61cb1e2b750e471f72b715a76f41afc47ab4b"
+DEFAULT_CLANG_PGO_DATA_URL = "https://mdb-build-public.s3.us-east-1.amazonaws.com/profiling_data/pgo/mongod_4c9edd48dd5f85769a7222a2c95b178dd5d792f3_aarch64_clang_thinlto_pgo_8.3.0-rc1000-97-g4c9edd4-patch-6993f7160bc96b0007489731.profdata"
+DEFAULT_CLANG_PGO_DATA_CHECKSUM = "6a051ba903041c3b295b4147bbd373deb661e3f45b6d8c206d7b91cd80c8feae"
 
 DEFAULT_GCC_PGO_DATA_URL = "https://mdb-build-public.s3.us-east-1.amazonaws.com/profiling_data/pgo/mongod_efcbfdbb937f52078925254ed32fbca7901b4ae6_aarch64_gcc_lto_pgo_8.3.0-alpha0-1055-gefcbfdb-patch-68bfb348576a720007510f50.tgz"
 DEFAULT_GCC_PGO_DATA_CHECKSUM = "29b9d919abdccb4a2eeb38670e0489312792700559eb7282e0b02fe2f5ec7744"
 
-DEFAULT_BOLT_DATA_URL = "https://mdb-build-public.s3.us-east-1.amazonaws.com/profiling_data/bolt/mongod_b133e06054f27a616834d38f5fdaae0b8c8d0362_aarch64_clang_thinlto_pgo_bolt_8.3.0-rc1000-83-gb133e06-patch-699299bda533ef0007199b94.fdata"
-DEFAULT_BOLT_DATA_CHECKSUM = "7565eac2076690eba19b52a38413b81dbdbc2f5625c51744db55db4fcde2c524"
+DEFAULT_BOLT_DATA_URL = "https://mdb-build-public.s3.us-east-1.amazonaws.com/profiling_data/bolt/mongod_4c9edd48dd5f85769a7222a2c95b178dd5d792f3_aarch64_clang_thinlto_pgo_bolt_8.3.0-rc1000-97-g4c9edd4-patch-6993f7160bc96b0007489731.fdata"
+DEFAULT_BOLT_DATA_CHECKSUM = "dfdacf1c3eb6eb0494f554488a2a7f584b38bc226c71b17c79d5136ae2fa8edc"
