@@ -64,8 +64,6 @@ const expectedReplSection = {
         "getmores": {"num": 0, "totalMillis": 0, "numEmptyBatches": 0},
         "notPrimaryLegacyUnacknowledgedWrites": 0,
         "notPrimaryUnacknowledgedWrites": 0,
-        "oplogFetcherHighestFetchedOptime": {},
-        "oplogFetcherLagSeconds": 0,
         "oplogGetMoresProcessed": {"num": 0, "totalMillis": 0},
         "ops": 0,
         "readersCreated": 0,
