@@ -189,14 +189,12 @@ void ReplicatedFastCountManager::_doFlush(
     OperationContext* opCtx,
     const CollectionPtr& coll,
     const absl::flat_hash_map<UUID, StoredSizeCount>& dirtyMetadata) {
-    // TODO SERVER-117512: We're performing one write per collection here. But we should be
-    // able to bundle many of these writes in a single applyOps using the WUOW
-    // grouping interface. Might be a problem with updates.
-
+    WriteUnitOfWork wuow(opCtx, WriteUnitOfWork::kGroupForPossiblyRetryableOperations);
     for (auto&& [metadataKey, metadataVal] : dirtyMetadata) {
         _writeOneMetadata(
             opCtx, coll, metadataKey, metadataVal.sizeCount, _keyForUUID(metadataKey));
     }
+    wuow.commit();
 }
 
 void ReplicatedFastCountManager::_startBackgroundThread(ServiceContext* svcCtx) {
@@ -253,7 +251,6 @@ void ReplicatedFastCountManager::_writeOneMetadata(OperationContext* opCtx,
                                                    const UUID& uuid,
                                                    const CollectionSizeCount& sizeCount,
                                                    const RecordId recordId) {
-    WriteUnitOfWork wuow(opCtx);
     Snapshotted<BSONObj> doc;
     bool exists = fastCountColl->findDoc(opCtx, recordId, &doc);
 
@@ -262,8 +259,6 @@ void ReplicatedFastCountManager::_writeOneMetadata(OperationContext* opCtx,
     } else {
         _insertOneMetadata(opCtx, fastCountColl, uuid, sizeCount);
     }
-
-    wuow.commit();
 }
 
 void ReplicatedFastCountManager::_updateOneMetadata(OperationContext* opCtx,
