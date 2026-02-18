@@ -458,7 +458,7 @@ std::string generateWTOpenConfigString(const WiredTigerKVEngineBase::WiredTigerC
         ss << "timing_stress_for_test=[history_store_checkpoint_delay,checkpoint_slow],";
     }
 
-    if (wtConfig.prefetchEnabled && gFeatureFlagPrefetch.isEnabled() && !wtConfig.inMemory) {
+    if (wtConfig.prefetchEnabled && !wtConfig.inMemory) {
         ss << "prefetch=(available=true,default=false),";
     }
 
