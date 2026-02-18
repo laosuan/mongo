@@ -57,17 +57,23 @@ public:
     ~AggStageAstNode() = default;
 
     /**
-     * Gets the BSON representation of an $_internalSearchIdLookup stage.
-     * The returned BSONObj is owned by this class.
+     * Gets the spec of an $_internalSearchIdLookup stage.
      */
-    BSONObj getIdLookupSpec() const {
+    const DocumentSourceIdLookupSpec& getIdLookupSpec() const {
         const auto* idLookup =
             dynamic_cast<const LiteParsedInternalSearchIdLookUp*>(_liteParsed.get());
         uassert(11160700,
                 str::stream() << "Expected $_internalSearchIdLookup stage, but got: "
                               << _liteParsed->getParseTimeName(),
                 idLookup);
-        return idLookup->getBsonSpec();
+        return idLookup->getSpec();
+    }
+
+    /**
+     * Gets the stage name from the underlying LiteParsedDocumentSource.
+     */
+    const std::string& getName() const {
+        return _liteParsed->getParseTimeName();
     }
 
 private:
@@ -97,15 +103,19 @@ public:
     ~HostAggStageAstNode() = default;
 
     /**
-     * Gets the BSON representation of the $_internalSearchIdLookup stage stored in the underlying
+     * Gets the spec of the $_internalSearchIdLookup stage stored in the underlying
      * AggStageAstNode. This will be extended to additional internal stage types in the
      * future.
-     *
-     * The returned BSONObj is owned by the underlying AggStageAstNode. If you want the
-     * BSON to outlive this class instance, you should create your own copy.
      */
-    inline BSONObj getIdLookupSpec() const {
+    inline const DocumentSourceIdLookupSpec& getIdLookupSpec() const {
         return _astNode->getIdLookupSpec();
+    }
+
+    /**
+     * Gets the stage name from the underlying AggStageAstNode.
+     */
+    inline const std::string& getStageName() const {
+        return _astNode->getName();
     }
 
     /**
@@ -141,9 +151,8 @@ private:
 
     static ::MongoExtensionByteView _hostGetName(
         const ::MongoExtensionAggStageAstNode* astNode) noexcept {
-        return stringDataAsByteView(static_cast<const HostAggStageAstNode*>(astNode)
-                                        ->getIdLookupSpec()
-                                        .firstElementFieldNameStringData());
+        return stringDataAsByteView(
+            static_cast<const HostAggStageAstNode*>(astNode)->getStageName());
     }
 
     static ::MongoExtensionStatus* _hostGetProperties(
@@ -171,8 +180,14 @@ private:
                                               ::MongoExtensionAggStageAstNode** output) noexcept {
         return wrapCXXAndConvertExceptionToStatus([&]() {
             auto* hostAstNode = static_cast<const HostAggStageAstNode*>(astNode);
+
+            // Get the spec and stage name from the original.
             auto spec = hostAstNode->getIdLookupSpec();
-            auto clonedLiteParsed = std::make_unique<LiteParsedInternalSearchIdLookUp>(spec);
+
+            auto clonedLiteParsed =
+                std::make_unique<LiteParsedInternalSearchIdLookUp>(std::move(spec));
+            clonedLiteParsed->makeOwned();
+
             auto clonedAstNode = std::make_unique<AggStageAstNode>(std::move(clonedLiteParsed));
             *output = new HostAggStageAstNode(std::move(clonedAstNode));
         });
