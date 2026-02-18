@@ -47,6 +47,25 @@
 namespace mongo {
 namespace {
 
+class MaybeUnreplicatedPreImageTruncateBlock {
+public:
+    explicit MaybeUnreplicatedPreImageTruncateBlock(OperationContext* opCtx) {
+        if (!change_stream_pre_image_util::shouldUseReplicatedTruncatesForPreImages(opCtx)) {
+            _uwb.emplace(opCtx);
+        }
+    }
+
+    MaybeUnreplicatedPreImageTruncateBlock(const MaybeUnreplicatedPreImageTruncateBlock&) = delete;
+    MaybeUnreplicatedPreImageTruncateBlock& operator=(
+        const MaybeUnreplicatedPreImageTruncateBlock&) = delete;
+    MaybeUnreplicatedPreImageTruncateBlock(MaybeUnreplicatedPreImageTruncateBlock&&) = delete;
+    MaybeUnreplicatedPreImageTruncateBlock& operator=(MaybeUnreplicatedPreImageTruncateBlock&&) =
+        delete;
+
+private:
+    boost::optional<repl::UnreplicatedWritesBlock> _uwb;
+};
+
 // Acquires a cursor on the pre-images collection, with a specifiable order (forward / backward).
 std::unique_ptr<SeekableRecordCursor> getCursor(OperationContext* opCtx,
                                                 const CollectionAcquisition& preImagesCollection,
@@ -67,14 +86,20 @@ auto acquirePreImagesCollectionForRead(OperationContext* opCtx, const UUID& uuid
             AcquisitionPrerequisites::kRead),
         MODE_IS);
 }
+
 auto acquirePreImagesCollectionForWrite(OperationContext* opCtx, const UUID& uuid) {
+    AcquisitionPrerequisites::OperationType acquisitionPrerequisites =
+        change_stream_pre_image_util::shouldUseReplicatedTruncatesForPreImages(opCtx)
+        ? AcquisitionPrerequisites::kWrite
+        : AcquisitionPrerequisites::kUnreplicatedWrite;
+
     return acquireCollection(
         opCtx,
         CollectionAcquisitionRequest(
             NamespaceStringOrUUID{NamespaceString::kChangeStreamPreImagesNamespace.dbName(), uuid},
             PlacementConcern{boost::none, ShardVersion::UNTRACKED()},
             repl::ReadConcernArgs::get(opCtx),
-            AcquisitionPrerequisites::kUnreplicatedWrite),
+            acquisitionPrerequisites),
         MODE_IX);
 }
 
@@ -126,7 +151,7 @@ void truncateExpiredMarkersForNsUUID(
             auto bytesDeleted = marker->bytes;
             auto docsDeleted = marker->records;
 
-            repl::UnreplicatedWritesBlock uwb(opCtx);
+            MaybeUnreplicatedPreImageTruncateBlock mupitb(opCtx);
             WriteUnitOfWork wuow(opCtx);
             collection_internal::truncateRange(opCtx,
                                                preImagesColl,
@@ -919,7 +944,7 @@ PreImagesTruncateStats PreImagesTruncateMarkers::truncateExpiredPreImages(Operat
                     .recordId();
 
             writeConflictRetry(opCtx, "final truncate", preImagesColl->ns(), [&] {
-                repl::UnreplicatedWritesBlock uwb(opCtx);
+                MaybeUnreplicatedPreImageTruncateBlock mupitb(opCtx);
                 WriteUnitOfWork wuow(opCtx);
                 collection_internal::truncateRange(
                     opCtx, preImagesColl, minRecordId, maxRecordId, 0, 0);
