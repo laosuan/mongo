@@ -29,37 +29,30 @@
 
 #pragma once
 
-#include "mongo/db/namespace_string.h"
-#include "mongo/db/operation_context.h"
-#include "mongo/db/s/resharding/resharding_metrics_common.h"
-#include "mongo/s/resharding/common_types_gen.h"
-#include "mongo/stdx/unordered_set.h"
+#include "mongo/db/repl/replica_set_aware_service.h"
 #include "mongo/util/modules.h"
-#include "mongo/util/observable_mutex.h"
-
-MONGO_MOD_PUBLIC;
 
 namespace mongo {
-class LocalReshardingOperationsRegistry {
+
+class ReshardingReplicaSetAwareService
+    : public ReplicaSetAwareServiceShardSvr<ReshardingReplicaSetAwareService> {
 public:
-    using Role = ReshardingMetricsCommon::Role;
-    struct Operation {
-        CommonReshardingMetadata metadata;
-        stdx::unordered_set<Role> roles;
-    };
+    static ReshardingReplicaSetAwareService* get(ServiceContext* serviceContext);
 
-    static LocalReshardingOperationsRegistry& get();
+    std::string getServiceName() const final {
+        return "ReshardingReplicaSetAwareService";
+    }
 
-    void registerOperation(Role role, const CommonReshardingMetadata& metadata);
-    void unregisterOperation(Role role, const CommonReshardingMetadata& metadata);
-    boost::optional<Operation> getOperation(const NamespaceString& nss) const;
+    void onConsistentDataAvailable(OperationContext* opCtx, bool isMajority, bool isRollback) final;
 
-    void resyncFromDisk(OperationContext* opCtx);
-
-private:
-    using UuidToOperation = stdx::unordered_map<UUID, Operation>;
-
-    mutable ObservableMutex<std::shared_mutex> _mutex;
-    stdx::unordered_map<NamespaceString, UuidToOperation> _namespaceToOperations;
+    void onStepUpBegin(OperationContext*, long long) final {}
+    void onShutdown() final {}
+    void onStartup(OperationContext*) final {}
+    void onStepDown() final {}
+    void onRollbackBegin() final {}
+    void onBecomeArbiter() final {}
+    void onSetCurrentConfig(OperationContext*) final {}
+    void onStepUpComplete(OperationContext*, long long) final {}
 };
+
 }  // namespace mongo

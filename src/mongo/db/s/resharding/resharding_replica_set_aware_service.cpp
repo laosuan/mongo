@@ -27,39 +27,29 @@
  *    it in the license file.
  */
 
-#pragma once
+#include "mongo/db/s/resharding/resharding_replica_set_aware_service.h"
 
-#include "mongo/db/namespace_string.h"
-#include "mongo/db/operation_context.h"
-#include "mongo/db/s/resharding/resharding_metrics_common.h"
-#include "mongo/s/resharding/common_types_gen.h"
-#include "mongo/stdx/unordered_set.h"
-#include "mongo/util/modules.h"
-#include "mongo/util/observable_mutex.h"
-
-MONGO_MOD_PUBLIC;
+#include "mongo/db/s/resharding/local_resharding_operations_registry.h"
 
 namespace mongo {
-class LocalReshardingOperationsRegistry {
-public:
-    using Role = ReshardingMetricsCommon::Role;
-    struct Operation {
-        CommonReshardingMetadata metadata;
-        stdx::unordered_set<Role> roles;
-    };
 
-    static LocalReshardingOperationsRegistry& get();
+namespace {
 
-    void registerOperation(Role role, const CommonReshardingMetadata& metadata);
-    void unregisterOperation(Role role, const CommonReshardingMetadata& metadata);
-    boost::optional<Operation> getOperation(const NamespaceString& nss) const;
+const auto decoration = ServiceContext::declareDecoration<ReshardingReplicaSetAwareService>();
 
-    void resyncFromDisk(OperationContext* opCtx);
+const ReplicaSetAwareServiceRegistry::Registerer<ReshardingReplicaSetAwareService> registerer(
+    "ReshardingReplicaSetAwareService");
 
-private:
-    using UuidToOperation = stdx::unordered_map<UUID, Operation>;
+}  // namespace
 
-    mutable ObservableMutex<std::shared_mutex> _mutex;
-    stdx::unordered_map<NamespaceString, UuidToOperation> _namespaceToOperations;
-};
+ReshardingReplicaSetAwareService* ReshardingReplicaSetAwareService::get(
+    ServiceContext* serviceContext) {
+    return &decoration(serviceContext);
+}
+
+void ReshardingReplicaSetAwareService::onConsistentDataAvailable(OperationContext* opCtx,
+                                                                 bool isMajority,
+                                                                 bool isRollback) {
+    LocalReshardingOperationsRegistry::get().resyncFromDisk(opCtx);
+}
 }  // namespace mongo
