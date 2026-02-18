@@ -125,14 +125,17 @@ def get_diff_revision(expansions_file: str = None, branch: str = None) -> str:
 
 
 def get_changed_files(
-    expansions_file: str = None, branch: str = None, diff_filter: str = "d"
+    expansions_file: str = None, branch: str = None, diff_filter: str | None = "d"
 ) -> List[str]:
     diff_commit = get_diff_revision(expansions_file, branch)
     repo = Repo()
 
-    output = repo.git.execute(
-        ["git", "diff", "--name-only", f"--diff-filter={diff_filter}", diff_commit]
-    )
+    command = ["git", "diff", "--name-only"]
+    if diff_filter:
+        command.append(f"--diff-filter={diff_filter}")
+    command.append(diff_commit)
+
+    output = repo.git.execute(command)
     files = output.split("\n")
     return [file for file in files if file]
 
