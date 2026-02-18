@@ -89,6 +89,9 @@ CollectionSizeCount UncommittedFastCountChange::find(const UUID& uuid) const {
 }
 
 void UncommittedFastCountChange::record(const UUID& uuid, int64_t numDelta, int64_t sizeDelta) {
+    if (numDelta == 0 && sizeDelta == 0) {
+        return;
+    }
     auto& collChanges = _trackedChanges[uuid];
     collChanges.count += numDelta;
     collChanges.size += sizeDelta;

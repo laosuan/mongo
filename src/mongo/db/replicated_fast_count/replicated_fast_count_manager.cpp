@@ -117,11 +117,13 @@ void ReplicatedFastCountManager::commit(
     boost::optional<Timestamp> commitTime) {
     stdx::lock_guard lock(_metadataMutex);
     for (const auto& [uuid, metadata] : changes) {
-        // TODO SERVER-117656: Investigate why we sometimes get zero changes here.
+        // Ignore changes that don't need to be flushed. Count and size can both be zero if two or
+        // more UncommittedFastCountChange::record() calls between checkpoints for the same UUID
+        // cancel each other out.
         if (metadata.count == 0 && metadata.size == 0) {
-            LOGV2_WARNING(11648808, "ReplicatedFastCountManager, Count & Size == 0");
             continue;
         }
+
         auto& stored = _metadata[uuid];
         stored.sizeCount.count += metadata.count;
         stored.sizeCount.size += metadata.size;
@@ -272,11 +274,16 @@ void ReplicatedFastCountManager::_updateOneMetadata(OperationContext* opCtx,
     CollectionUpdateArgs args(doc.value());
     // TODO SERVER-117654: When we also store timestamp we should be able to recover/combine data
     // from old doc to keep this accurate.
-    BSONObj newDoc = _getDocForWrite(uuid, sizeCount);
+    const BSONObj newDoc = _getDocForWrite(uuid, sizeCount);
 
-    auto diff = doc_diff::computeOplogDiff(doc.value(), newDoc, /*padding=*/0);
+    const auto diff = doc_diff::computeOplogDiff(doc.value(), newDoc, /*padding=*/0);
+    invariant(
+        diff.has_value(),
+        fmt::format("Expected computed diff to be smaller than the post-image: pre={}, post={}",
+                    doc.value().toString(),
+                    newDoc.toString()));
 
-    if (diff) {
+    if (!diff->isEmpty()) {
         args.update = update_oplog_entry::makeDeltaOplogEntry(*diff);
         args.criteria = BSON("_id" << uuid);
         collection_internal::updateDocument(
