@@ -466,6 +466,7 @@ mongo_cc_library(
         ":analyze_shard_key_util",
         ":balancer_stats_registry",
         ":forwardable_operation_metadata",
+        ":local_resharding_operations_registry",
         ":query_analysis_writer",
         ":range_deletion_task",
         ":resharding_server_parameters_idl",
@@ -1012,6 +1013,7 @@ mongo_cc_unit_test(
     name = "db_s_resharding_part3_test",
     srcs = [
         "//src/mongo/db/s/resharding:local_resharding_operations_registry_test.cpp",
+        "//src/mongo/db/s/resharding:resharding_op_observer_test.cpp",
         "//src/mongo/db/s/resharding:resharding_recipient_service_external_state_test.cpp",
         "//src/mongo/db/s/resharding:resharding_recipient_service_test.cpp",
         "//src/mongo/db/s/resharding:resharding_txn_cloner_test.cpp",
