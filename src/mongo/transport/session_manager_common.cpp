@@ -145,7 +145,8 @@ std::size_t getSupportedMax() {
 auto& connectionsProcessedCounter = otel::metrics::MetricsService::instance().createInt64Counter(
     otel::metrics::MetricNames::kConnectionsProcessed,
     "Total number of ingress connections processed (accepted or rejected)",
-    otel::metrics::MetricUnit::kConnections);
+    otel::metrics::MetricUnit::kConnections,
+    {.inServerStatus = true});
 
 auto& openConnectionsGauge = otel::metrics::MetricsService::instance().createInt64Gauge(
     otel::metrics::MetricNames::kOpenConnections,
