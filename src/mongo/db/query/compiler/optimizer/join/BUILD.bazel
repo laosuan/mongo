@@ -180,6 +180,7 @@ mongo_cc_library(
         "join_estimates.cpp",
     ],
     deps = [
+        ":catalog",
         ":join_ordering",
         "//src/mongo/db/query/compiler/ce:ce_common",
         "//src/mongo/db/query/compiler/ce/sampling:sampling_estimator_interface",
