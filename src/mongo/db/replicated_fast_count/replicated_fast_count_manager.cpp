@@ -128,6 +128,11 @@ void ReplicatedFastCountManager::commit(
         stored.sizeCount.count += metadata.count;
         stored.sizeCount.size += metadata.size;
         stored.dirty = true;
+        invariant(stored.sizeCount.size >= 0 && stored.sizeCount.count >= 0,
+                  fmt::format("Expected fast count size and count to be non-negative, but saw size "
+                              "{} and count {}",
+                              stored.sizeCount.size,
+                              stored.sizeCount.count));
     }
 }
 

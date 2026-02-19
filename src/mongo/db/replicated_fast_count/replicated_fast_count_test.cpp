@@ -42,6 +42,7 @@
 #include "mongo/db/shard_role/shard_catalog/catalog_raii.h"
 #include "mongo/db/shard_role/shard_catalog/catalog_test_fixture.h"
 #include "mongo/db/shard_role/shard_catalog/create_collection.h"
+#include "mongo/unittest/death_test.h"
 #include "mongo/unittest/unittest.h"
 
 namespace mongo {
@@ -735,6 +736,17 @@ TEST_F(ReplicatedFastCountTest, ApplyOpsDeletesAreCorrectlyAccountedFor) {
     replicated_fast_count_test_helpers::checkCommittedFastCountChanges(
         _uuid1, _fastCountManager, expectedCount, expectedSize);
     replicated_fast_count_test_helpers::checkUncommittedFastCountChanges(_opCtx, _uuid1, 0, 0);
+}
+
+using ReplicatedFastCountDeathTest = ReplicatedFastCountTest;
+
+DEATH_TEST_REGEX_F(ReplicatedFastCountDeathTest,
+                   CannotHaveNegativeCommittedSizeOrCount,
+                   R"(Invariant failure.*Expected fast count size and count to be non-negative)") {
+    boost::container::flat_map<UUID, CollectionSizeCount> changes;
+    changes[UUID::gen()] = CollectionSizeCount{-10, -1};
+
+    _fastCountManager->commit(changes, boost::none);
 }
 
 }  // namespace
