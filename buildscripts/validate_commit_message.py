@@ -67,6 +67,8 @@ ALLOWED_JIRA_PROJECTS = {
     "GUARD": ["monguard/**/*"],  # GUARD commits can only modify files in the monguard directory
 }
 
+RETRY_INSTRUCTIONS = "If you are seeing this on a PR, after changing the required field, you will need to restart the failed validate_commit_message task in Evergreen before being able to submit your PR."
+
 
 def is_valid_commit(commit: Commit, changed_files: list[str] = []) -> bool:
     # Valid values look like:
@@ -80,7 +82,7 @@ def is_valid_commit(commit: Commit, changed_files: list[str] = []) -> bool:
             f"""PR summary is not valid; it must match the regular expression: {VALID_SUMMARY}
 Current summary: {commit.summary}
 Please update the PR title and description to match the expected format.
-If you are seeing this on a PR, after changing the title/description, you will need to rerun this check before being able to submit your PR.
+{RETRY_INSTRUCTIONS}
 The decision to add this check was made in SERVER-101443, please feel free to leave comments/feedback on that ticket.""",
         )
         return False
@@ -91,7 +93,8 @@ The decision to add this check was made in SERVER-101443, please feel free to le
         # if there is a jira project, check that it is in the allowed list
         if jira_project not in ALLOWED_JIRA_PROJECTS:
             LOGGER.error(
-                f"PR summary contains an invalid Jira project {jira_project}; it must be one of: {list(ALLOWED_JIRA_PROJECTS.keys())}"
+                f"""PR summary contains an invalid Jira project {jira_project}; it must be one of: {list(ALLOWED_JIRA_PROJECTS.keys())}
+{RETRY_INSTRUCTIONS}"""
             )
             return False
 
@@ -101,7 +104,8 @@ The decision to add this check was made in SERVER-101443, please feel free to le
         for file in changed_files:
             if not spec.match_file(file):
                 LOGGER.error(
-                    f"""PR summary indicates Jira project {jira_project} but the PR modifies file {file} which is not allowed for that Jira project."""
+                    f"""PR summary indicates Jira project {jira_project} but the PR modifies file {file} which is not allowed for that Jira project.
+{RETRY_INSTRUCTIONS}"""
                 )
                 return False
 
@@ -113,7 +117,7 @@ The decision to add this check was made in SERVER-101443, please feel free to le
             LOGGER.error(
                 """PR title/description contains a banned string (ignoring whitespace).
 Please update the PR title and description to not contain the following banned string.
-If you are seeing this on a PR, after changing the title/description, you will need to rerun this check before being able to submit your PR.
+{RETRY_INSTRUCTIONS}
 The decision to add this check was made in SERVER-101443, please feel free to leave comments/feedback on that ticket.""",
                 banned_string=banned_string,
                 commit_message=commit.message,
