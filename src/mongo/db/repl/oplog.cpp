@@ -881,6 +881,15 @@ const StringMap<ApplyOpMetadata> kOpsMap = {
           const auto cmd = getObjWithSanitizedStorageEngineOptions(opCtx, entry.getObject());
           const NamespaceString nss(extractNs(entry.getNss().dbName(), cmd));
 
+          uassert(ErrorCodes::CommandNotSupported,
+                  "'recordIdsReplicated' field may not be used for 'applyOps' without "
+                  "featureFlagRecordIdsReplicated enabled",
+                  mode != repl::OplogApplication::Mode::kApplyOpsCmd ||
+                      !cmd["recordIdsReplicated"] ||
+                      gFeatureFlagRecordIdsReplicated.isEnabled(
+                          VersionContext::getDecoration(opCtx),
+                          serverGlobalParams.featureCompatibility.acquireFCVSnapshot()));
+
           // Mode SECONDARY steady state replication should not allow create collection to rename an
           // existing collection out of the way. This leaves a collection orphaned and is a bug.
           // Renaming temporarily out of the way is only allowed for oplog replay, where we expect
@@ -1800,39 +1809,49 @@ Status applyOperation_inlock(OperationContext* opCtx,
 
     const CollectionPtr& collection = collectionAcquisition.getCollectionPtr();
 
-    constexpr auto rridErrMsg =
+    constexpr auto ridErrMsg =
         "Unexpected recordId value for collection with ns: '{}', uuid: '{}', recordIdsReplicated: "
         "'{}' when applying oplog entry: '{}'";
+    boost::optional<RecordId> opRid = boost::none;
+    bool skipUsingRid = false;
     if (collection &&
         (opType == OpTypeEnum::kInsert || opType == OpTypeEnum::kUpdate ||
          opType == OpTypeEnum::kDelete)) {
+        // In some migration cases, the oplog entries may contain the 'rid' field introduced when
+        // the feature flag is enabled, but they need to be applied to a server with the feature
+        // flag disabled. We will ignore the 'rid' field then.
+        skipUsingRid = !gFeatureFlagRecordIdsReplicated.isEnabled(
+                           VersionContext::getDecoration(opCtx),
+                           serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
+            mode == repl::OplogApplication::Mode::kApplyOpsCmd;
+        if (!skipUsingRid) {
+            opRid = op.getDurableReplOperation().getRecordId();
+        }
         if (mode == repl::OplogApplication::Mode::kApplyOpsCmd) {
             // Only disallow applying an operation with 'rid' field on a collection not using
             // replicated record ids.
             tassert(11454700,
-                    fmt::format(rridErrMsg,
+                    fmt::format(ridErrMsg,
                                 collection->ns().toStringForErrorMsg(),
                                 collection->uuid().toString(),
                                 collection->areRecordIdsReplicated(),
                                 redact(opOrGroupedInserts.toBSON()).toString()),
-                    !op.getDurableReplOperation().getRecordId().has_value() ||
-                        collection->areRecordIdsReplicated());
+                    !opRid.has_value() || collection->areRecordIdsReplicated());
         } else {
             // Check that the operation's 'rid' field is consistent with whether the collection is
             // using replicated record ids.
             tassert(11454701,
-                    fmt::format(rridErrMsg,
+                    fmt::format(ridErrMsg,
                                 collection->ns().toStringForErrorMsg(),
                                 collection->uuid().toString(),
                                 collection->areRecordIdsReplicated(),
                                 redact(opOrGroupedInserts.toBSON()).toString()),
-                    op.getDurableReplOperation().getRecordId().has_value() ==
-                        collection->areRecordIdsReplicated());
+                    opRid.has_value() == collection->areRecordIdsReplicated());
         }
     }
 
-    if (auto ridOpt = op.getDurableReplOperation().getRecordId(); ridOpt.has_value()) {
-        tassert(7835000, "The RecordId in an oplog entry cannot be Null", !ridOpt->isNull());
+    if (opRid.has_value()) {
+        tassert(7835000, "The RecordId in an oplog entry cannot be Null", !opRid->isNull());
     }
 
     BSONObj o = op.getObject();
@@ -1922,12 +1941,15 @@ Status applyOperation_inlock(OperationContext* opCtx,
                 // applyOps, this has the effect of preserving recordIds when applyOps is run,
                 // which is intentional.
                 for (size_t i = 0; i < insertObjs.size(); i++) {
-                    auto optRid = insertOps[i]->getDurableReplOperation().getRecordId();
+                    boost::optional<RecordId> optRid;
+                    if (!skipUsingRid) {
+                        optRid = insertOps[i]->getDurableReplOperation().getRecordId();
+                    }
                     if (mode == repl::OplogApplication::Mode::kApplyOpsCmd) {
                         // Only disallow applying an operation with 'rid' field on a collection not
                         // using replicated record ids.
                         tassert(11454702,
-                                fmt::format(rridErrMsg,
+                                fmt::format(ridErrMsg,
                                             collection->ns().toStringForErrorMsg(),
                                             collection->uuid().toString(),
                                             collection->areRecordIdsReplicated(),
@@ -1938,7 +1960,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                         // Check that the operation's 'rid' field is consistent with whether the
                         // collection is using replicated record ids.
                         tassert(11454703,
-                                fmt::format(rridErrMsg,
+                                fmt::format(ridErrMsg,
                                             collection->ns().toStringForErrorMsg(),
                                             collection->uuid().toString(),
                                             collection->areRecordIdsReplicated(),
@@ -2052,8 +2074,8 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     // If an oplog entry has a recordId, this means that the collection is a
                     // recordIdReplicated collection, and therefore we should use the recordId
                     // present.
-                    if (op.getDurableReplOperation().getRecordId()) {
-                        insertStmt.replicatedRecordId = *op.getDurableReplOperation().getRecordId();
+                    if (opRid.has_value()) {
+                        insertStmt.replicatedRecordId = *opRid;
                     }
                     OpDebug* const nullOpDebug = nullptr;
                     Status status = collection_internal::insertDocument(
@@ -2100,8 +2122,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                             return Status::OK();
                         }
 
-                        if (auto opRid = op.getDurableReplOperation().getRecordId();
-                            opRid.has_value() && !isApplyOpsCmd) {
+                        if (opRid.has_value() && !isApplyOpsCmd) {
                             // For collections with replicated recordIds we are taking the hard
                             // stance in steady state that getting a DuplicatedKey error while
                             // applying an insert oplog entry is a constraint violation.
@@ -2123,8 +2144,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                 if (needToDoUpsert) {
                     auto oplogIdField = o.getField("_id");
 
-                    if (auto opRid = op.getDurableReplOperation().getRecordId();
-                        opRid.has_value() && isApplyOpsCmd) {
+                    if (opRid.has_value()) {
                         Snapshotted<BSONObj> doc;
                         // If it is an applyOps cmd with recordId, and a document exists at the
                         // oplog recordId, the _id of that document must match the _id in the oplog.
@@ -2219,10 +2239,8 @@ Status applyOperation_inlock(OperationContext* opCtx,
             // a specific RecordId.
             tassert(7834905,
                     "Oplog entries with upsert:true are not allowed to also contain a RecordId",
-                    !upsertOplogEntry || !op.getDurableReplOperation().getRecordId().has_value());
-            const bool upsert =
-                (alwaysUpsert && !op.getDurableReplOperation().getRecordId().has_value()) ||
-                upsertOplogEntry;
+                    !upsertOplogEntry || !opRid.has_value());
+            const bool upsert = (alwaysUpsert && !opRid.has_value()) || upsertOplogEntry;
             auto request = UpdateRequest();
             request.setNamespaceString(requestNss);
             request.setQuery(updateCriteria);
@@ -2308,7 +2326,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     UpdateResult ur = [&]() {
                         bool recordPreImage =
                             recordChangeStreamPreImage && request.shouldReturnNewDocs();
-                        if (op.getDurableReplOperation().getRecordId().has_value()) {
+                        if (opRid.has_value()) {
                             // TODO SERVER-118695 Support upsert requests
                             request.setUpsert(false);
                             return updateObjectByRid(opCtx,
@@ -2331,8 +2349,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     }();
                     if (ur.numMatched == 0 && ur.upsertedId.isEmpty()) {
                         if (collection && collection->isCapped() &&
-                            mode == OplogApplication::Mode::kSecondary &&
-                            !op.getDurableReplOperation().getRecordId().has_value()) {
+                            mode == OplogApplication::Mode::kSecondary && !opRid.has_value()) {
                             // We can't assume there was a problem when the collection is capped,
                             // because the item may have been deleted by the cappedDeleter.  This
                             // only matters for steady-state mode, because all errors on missing
@@ -2498,7 +2515,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     // If an oplog entry has a recordId, we can bypass the query system and fetch
                     // and delete the document using the storage and collection APIs.
                     DeleteResult result;
-                    if (op.getDurableReplOperation().getRecordId().has_value()) {
+                    if (opRid.has_value()) {
                         result = deleteObjectByRid(
                             opCtx, op, collectionAcquisition, opCounters, idField, mode, request);
                     } else {

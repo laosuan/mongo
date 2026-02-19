@@ -495,6 +495,8 @@ TEST_F(ApplyOpsUpdateTest, ApplyOpsUpdateWithUpsertSucceeds) {
 
 using ApplyOpsUpdateDeathTest = ApplyOpsUpdateTest;
 DEATH_TEST_F(ApplyOpsUpdateDeathTest, ApplyOpsUpdateWithUpsertAndRecordIdFails, "7834905") {
+    RAIIServerParameterControllerForTest _featureFlagReplRidController{
+        "featureFlagRecordIdsReplicated", true};
     // Insert a document at a known recordId.
     const RecordId rid(1);
     const BSONObj doc = BSON("_id" << 1 << "x" << 100);
@@ -512,6 +514,8 @@ DEATH_TEST_F(ApplyOpsUpdateDeathTest, ApplyOpsUpdateWithUpsertAndRecordIdFails, 
 }
 
 DEATH_TEST_F(ApplyOpsUpdateDeathTest, ApplyOpsUpdateByNullRecordId, "7835000") {
+    RAIIServerParameterControllerForTest _featureFlagReplRidController{
+        "featureFlagRecordIdsReplicated", true};
     // Insert a document at a known recordId.
     const RecordId rid(1);
     insertDocumentAtRecordId(_opCtx.get(), _nss, BSON("_id" << 1 << "x" << 100), rid);

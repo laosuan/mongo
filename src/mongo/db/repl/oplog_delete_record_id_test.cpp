@@ -335,6 +335,8 @@ TEST_F(ApplyOpsDeleteTest, ApplyOpsDeleteByIdDocumentNotFoundSucceeds) {
 
 using ApplyOpsDeleteDeathTest = ApplyOpsDeleteTest;
 DEATH_TEST_F(ApplyOpsDeleteDeathTest, ApplyOpsDeleteByNullRecordId, "7835000") {
+    RAIIServerParameterControllerForTest _featureFlagReplRidController{
+        "featureFlagRecordIdsReplicated", true};
     // Insert a document at a known recordId.
     const RecordId rid(1);
     insertDocumentAtRecordId(_opCtx.get(), _nss, BSON("_id" << 1 << "x" << 100), rid);
