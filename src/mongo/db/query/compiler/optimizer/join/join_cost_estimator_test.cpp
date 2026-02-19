@@ -58,6 +58,7 @@ public:
             {makeNodeSet(extremelySmallNodeId), makeCard(1)},
             {makeNodeSet(smallNodeId, largeNodeId), makeCard(1)},
             {makeNodeSet(smallNodeId, unselectiveNodeId), makeCard(100'000)},
+            {makeNodeSet(largeNodeId, unselectiveNodeId), makeCard(100'000)},
         };
         NodeCardinalities collCards{
             makeCard(100'000), makeCard(2'000'000), makeCard(2'000'000), makeCard(1)};

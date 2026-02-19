@@ -66,6 +66,7 @@ JoinCostEstimate JoinCostEstimatorImpl::costIndexScanFragment(NodeId nodeId) {
     CardinalityEstimate numSeqIOs = zeroCE;
     // Model the random IO performed by fetching documents from the collection. For simplicity,
     // assume that every index entry causes us to read a new page from the collection.
+    // TODO SERVER-119780: Use Mackert-Lohman formula
     CardinalityEstimate numRandIOs = numDocsOutput;
     return JoinCostEstimate(numDocsProcessed, numDocsOutput, numSeqIOs, numRandIOs);
 }
@@ -155,10 +156,16 @@ JoinCostEstimate JoinCostEstimatorImpl::costINLJFragment(const JoinPlanNode& lef
     CardinalityEstimate numDocsProcessed = leftDocs * 2 + numDocsOutput;
     // Assume that sequential IO done by the index scan is neglible.
     CardinalityEstimate numSeqIOs = zeroCE;
-    // Model the random IO performed by doing the index probe and fetch. We perform a random IO for
-    // each document we fetch.
+
+    // Model the random IO performed by doing the index probe and fetch.
     // TODO SERVER-117523: Integrate the height of the B-tree into the formula.
-    CardinalityEstimate numRandIOs = numDocsProcessed;
+    auto& rightCollStats =
+        _jCtx.catStats.collStats.at(_jCtx.joinGraph.getNode(right).collectionName);
+    double numPagesColl = rightCollStats.logicalDataSizeBytes / rightCollStats.pageSizeBytes;
+    CardinalityEstimate numRandIOs = CardinalityEstimate{
+        CardinalityType{estimateMackertLohmanRandIO(
+            numPagesColl, _jCtx.catStats.numPagesInStorageEngineCache, numDocsOutput.toDouble())},
+        EstimationSource::Sampling};
 
     return JoinCostEstimate(numDocsProcessed,
                             numDocsOutput,

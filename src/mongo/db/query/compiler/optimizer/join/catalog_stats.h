@@ -54,6 +54,9 @@ struct CollectionStats {
  */
 struct CatalogStats {
     stdx::unordered_map<NamespaceString, CollectionStats> collStats;
+
+    // Default to 2GiB / 32KiB as a start
+    double numPagesInStorageEngineCache{65536};
 };
 
 // For a single collection, the maximum number of distinct fields that are part of unique indexes
