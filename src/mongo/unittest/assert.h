@@ -42,8 +42,6 @@
 #include "mongo/bson/bsonobj.h"
 #include "mongo/db/exec/mutable_bson/mutable_bson_test_utils.h"
 #include "mongo/unittest/framework.h"
-#include "mongo/unittest/matcher.h"
-#include "mongo/util/active_exception_witness.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/modules.h"
 
@@ -53,6 +51,7 @@
 #include <utility>
 #include <vector>
 
+#include <boost/exception/diagnostic_information.hpp>
 #include <fmt/format.h>
 
 MONGO_MOD_PUBLIC;
@@ -126,16 +125,18 @@ MONGO_MOD_PUBLIC;
  */
 #define ASSERT_THROWS_WHAT(EXPRESSION, EXCEPTION_TYPE, EXPECTED_WHAT) \
     ASSERT_THAT([&] { (void)(EXPRESSION); },                          \
-                ::mongo::unittest::match::Throws<EXCEPTION_TYPE>(     \
+                ::testing::Throws<EXCEPTION_TYPE>(                    \
                     ::testing::Property(&EXCEPTION_TYPE::what, ::testing::StrEq(EXPECTED_WHAT))))
+
 /**
  * Behaves like ASSERT_THROWS, above, but also fails if calling getCode() on the thrown exception
  * does not return an error code equal to EXPECTED_CODE.
  */
 #define ASSERT_THROWS_CODE(EXPRESSION, EXCEPTION_TYPE, EXPECTED_CODE) \
     ASSERT_THAT([&] { (void)(EXPRESSION); },                          \
-                ::mongo::unittest::match::Throws<EXCEPTION_TYPE>(     \
+                ::testing::Throws<EXCEPTION_TYPE>(                    \
                     ::testing::Property(&EXCEPTION_TYPE::code, EXPECTED_CODE)))
+
 /**
  * Behaves like ASSERT_THROWS, above, but also fails if calling getCode() on the thrown exception
  * does not return an error code equal to EXPECTED_CODE or if calling what() on the thrown exception
@@ -143,9 +144,10 @@ MONGO_MOD_PUBLIC;
  */
 #define ASSERT_THROWS_CODE_AND_WHAT(EXPRESSION, EXCEPTION_TYPE, EXPECTED_CODE, EXPECTED_WHAT) \
     ASSERT_THAT([&] { (void)(EXPRESSION); },                                                  \
-                ::mongo::unittest::match::Throws<EXCEPTION_TYPE>(::testing::AllOf(            \
+                ::testing::Throws<EXCEPTION_TYPE>(::testing::AllOf(                           \
                     ::testing::Property(&EXCEPTION_TYPE::code, EXPECTED_CODE),                \
                     ::testing::Property(&EXCEPTION_TYPE::what, ::testing::StrEq(EXPECTED_WHAT)))))
+
 
 /**
  * Compiles if expr doesn't compile.
@@ -193,7 +195,7 @@ MONGO_MOD_PUBLIC;
                     fmt::format("\n  expression: {}"                               \
                                 "\n  exception: {}",                               \
                                 #EXPRESSION,                                       \
-                                ::mongo::describeActiveException()));              \
+                                ::mongo::unittest::describeException(ex)));        \
                 CHECK(ex);                                                         \
                 return true;                                                       \
             }                                                                      \
@@ -216,6 +218,16 @@ MONGO_MOD_PUBLIC;
     ASSERT_THAT(BIG_STRING, ::testing::ContainsRegex(REGEX))
 
 namespace mongo::unittest {
+
+template <typename Ex>
+std::string describeException(const Ex& ex) {
+    if constexpr (std::is_base_of_v<DBException, Ex>) {
+        return ex.toString();
+    } else if constexpr (std::is_base_of_v<boost::exception, Ex> ||
+                         std::is_base_of_v<std::exception, Ex>) {
+        return boost::diagnostic_information(ex, true);
+    }
+}
 
 /**
  * Get the value out of a StatusWith<T>, or throw an exception if it is not OK.

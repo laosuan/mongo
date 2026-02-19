@@ -51,7 +51,6 @@
 #include "mongo/transport/asio/asio_utils.h"
 #include "mongo/transport/service_entry_point.h"
 #include "mongo/transport/transport_options_gen.h"
-#include "mongo/util/active_exception_witness.h"
 #include "mongo/util/clock_source.h"
 #include "mongo/util/errno_util.h"
 #include "mongo/util/executor_stats.h"
@@ -64,6 +63,7 @@
 #include "mongo/util/options_parser/startup_options.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/scopeguard.h"
+#include "mongo/util/signal_handlers_synchronous.h"
 #include "mongo/util/strong_weak_finish_line.h"
 
 #include <type_traits>
