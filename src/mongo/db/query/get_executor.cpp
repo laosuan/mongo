@@ -495,7 +495,7 @@ public:
      * If so, a ResultType can be returned to skip re-building a planner from zero.
      */
     virtual std::unique_ptr<ResultType> maybePlannerFromRankerResult(
-        StatusWith<plan_ranking::PlanRankingResult>& rankerResult, CanonicalQuery& cq) {
+        StatusWith<PlanRankingResult>& rankerResult, CanonicalQuery& cq) {
         return nullptr;
     }
 
@@ -503,7 +503,7 @@ public:
         return *_plannerParams.get();
     }
 
-    bool shouldMultiPlanForSingleSolution(const plan_ranking::PlanRankingResult& rankerResult,
+    bool shouldMultiPlanForSingleSolution(const PlanRankingResult& rankerResult,
                                           const CanonicalQuery* cq) {
         auto expCtx = _cq->getExpCtxRaw();
 
@@ -704,7 +704,7 @@ private:
     }
 
     std::unique_ptr<ClassicRuntimePlannerResult> maybePlannerFromRankerResult(
-        StatusWith<plan_ranking::PlanRankingResult>& rankerResult, CanonicalQuery& cq) override {
+        StatusWith<PlanRankingResult>& rankerResult, CanonicalQuery& cq) override {
         if (!rankerResult.isOK()) {
             // Ranking failed
             return nullptr;

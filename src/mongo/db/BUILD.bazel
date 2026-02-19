@@ -880,6 +880,8 @@ mongo_cc_library(
         "//src/mongo/db/query:find.cpp",
         "//src/mongo/db/query:get_executor.cpp",
         "//src/mongo/db/query:get_executor_deferred_engine_choice.cpp",
+        "//src/mongo/db/query:get_executor_deferred_engine_choice_lowering.cpp",
+        "//src/mongo/db/query:get_executor_deferred_engine_choice_planning.cpp",
         "//src/mongo/db/query:get_executor_fast_paths.cpp",
         "//src/mongo/db/query:get_executor_helpers.cpp",
         "//src/mongo/db/query:internal_plans.cpp",
