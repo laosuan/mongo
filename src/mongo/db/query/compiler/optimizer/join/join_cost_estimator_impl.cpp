@@ -47,7 +47,7 @@ JoinCostEstimate JoinCostEstimatorImpl::costCollScanFragment(NodeId nodeId) {
     // estimate the number of disk read by estimating the number of pages the collscan will read.
     // This is done by dividing the data size by the page size.
     CardinalityEstimate numSeqIOs = CardinalityEstimate{
-        CardinalityType{collStats.allocatedDataPageBytes / collStats.pageSizeBytes},
+        CardinalityType{collStats.logicalDataSizeBytes / collStats.pageSizeBytes},
         EstimationSource::Metadata};
     // CollScan does no random read from disk.
     CardinalityEstimate numRandIOs = zeroCE;
@@ -82,7 +82,7 @@ double JoinCostEstimatorImpl::estimateDocSize(NodeSet subset) const {
         if (collSize == 0) {
             continue;
         }
-        auto avgDocSize = collStats.allocatedDataPageBytes / collSize;
+        auto avgDocSize = collStats.logicalDataSizeBytes / collSize;
         result += avgDocSize;
     }
     return result;

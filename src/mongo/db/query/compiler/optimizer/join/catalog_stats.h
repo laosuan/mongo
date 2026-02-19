@@ -39,16 +39,13 @@ namespace mongo::join_ordering {
  * Statisitics for a single collection.
  */
 struct CollectionStats {
-    // Total number of on-disk bytes currently allocated to data pages that are still in use
-    // by this collection's record data, after storage-engine compression. Intended to be derived
-    // from the record store's on-disk size metrics (e.g. storageSize - freeStorageSize). This
-    // includes both live document data and any unused space on those pages, but excludes fully
-    // free/reusable pages and all index storage.
-    double allocatedDataPageBytes;
+    // Estimate of the data size of this collection when in-memory (uncompressed and unencrypted).
+    double logicalDataSizeBytes;
 
-    // Approximate size, in bytes, of a single on-disk data page for this collection after
-    // storage-engine compression. The optimizer uses this as the I/O granularity when converting
-    // between bytes and page reads in cost estimates. Default to 32KiB if not specified.
+    // Approximate size, in bytes, of a single in-memory WT data page for this collection before
+    // compression and encryption. The optimizer uses this as the I/O granularity when estimating
+    // the number of disk I/Os performed by an operator for cost estimates.
+    // Default to 32KiB if not specified.
     double pageSizeBytes{32 * 1024};
 };
 

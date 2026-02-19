@@ -69,13 +69,13 @@ public:
         jCtx->catStats = {
             .collStats = {
                 {smallNss,
-                 CollectionStats{.allocatedDataPageBytes =
+                 CollectionStats{.logicalDataSizeBytes =
                                      collCards[smallNodeId].toDouble() * docSizeBytes}},
                 {largeNss,
-                 CollectionStats{.allocatedDataPageBytes =
+                 CollectionStats{.logicalDataSizeBytes =
                                      collCards[largeNodeId].toDouble() * docSizeBytes}},
                 {extremelySmallNss,
-                 CollectionStats{.allocatedDataPageBytes =
+                 CollectionStats{.logicalDataSizeBytes =
                                      collCards[extremelySmallNodeId].toDouble() * docSizeBytes}},
             }};
 

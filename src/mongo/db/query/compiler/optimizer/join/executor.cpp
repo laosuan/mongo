@@ -162,13 +162,12 @@ CatalogStats createCatalogStats(OperationContext* opCtx, const MultipleCollectio
     CatalogStats catStats;
     mca.forEach([&catStats, &ru](const CollectionPtr& coll) {
         auto* recordStore = coll->getRecordStore();
-        double allocatedDataPageBytes =
-            recordStore->storageSize(ru) - recordStore->freeStorageSize(ru);
         // TODO SERVER-117620: set .pageSizeBytes.
-        catStats.collStats.emplace(coll->ns(),
-                                   CollectionStats{
-                                       .allocatedDataPageBytes = allocatedDataPageBytes,
-                                   });
+        catStats.collStats.emplace(
+            coll->ns(),
+            CollectionStats{
+                .logicalDataSizeBytes = static_cast<double>(recordStore->dataSize()),
+            });
     });
     return catStats;
 }
