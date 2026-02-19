@@ -55,6 +55,7 @@
 
 #include <fcntl.h>
 
+#include <boost/exception/detail/exception_ptr.hpp>
 #include <boost/log/core/core.hpp>
 #include <boost/optional.hpp>
 #include <boost/shared_ptr.hpp>
