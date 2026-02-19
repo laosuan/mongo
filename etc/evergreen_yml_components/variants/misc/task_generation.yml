@@ -4,11 +4,21 @@
 # which is the same but excludes resmoke task generation tasks.
 #
 
+variables:
+  # THIS HAS COPIES IN:
+  # - etc/evergreen_yml_components/variants/amazon/test_dev.yml
+  # - etc/evergreen_yml_components/variants/misc/task_generation.yml
+  # ANY MODIFICATIONS HERE SHOULD ALSO BE MADE IN THOSE FILES
+  - paths: &mongo_path_filtering
+      - "*"
+      - "!/monguard/**"
+
 buildvariants:
   - name: generate-tasks-for-version
     display_name: "! Generate tasks for evergreen version"
     tags: ["required"]
     activate: true
+    paths: *mongo_path_filtering
     run_on:
       - rhel8.8-medium
     modules:
