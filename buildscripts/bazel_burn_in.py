@@ -350,7 +350,7 @@ def generate_tasks(origin_rev: str, outfile: Annotated[str, typer.Option()]):
             task["activate"] = False
     for task in project["tasks"]:
         task["exec_timeout_secs"] = 1800
-    project["tasks"].extend([task.as_dict() for task in results_tasks])
+    project["tasks"].extend([task for task in results_tasks])
 
     with open(outfile, "w") as f:
         f.write(json.dumps(project, indent=4))
