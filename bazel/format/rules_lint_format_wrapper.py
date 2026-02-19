@@ -103,6 +103,7 @@ def run_prettier(
         "!./bazel-mongo",
         "!./external",
         "!./.compiledb",
+        "!./monguard",
     }
     for path in pathlib.Path(".").iterdir():
         if path.is_symlink():
@@ -113,6 +114,9 @@ def run_prettier(
             "--cache",
             "--log-level",
             "warn",
+            # Changed-files mode may include extensions prettier does not parse (for example .py, .sky).
+            # Ignore unknown files so formatter routing can continue instead of failing early.
+            "--ignore-unknown",
         ]
         if files_to_format == "all":
             command += ["."]

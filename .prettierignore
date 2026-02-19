@@ -60,3 +60,6 @@ bazel-*
 src/mongo/db/modules/enterprise/src/streams/third_party/mongocxx/dist
 # asp-js-engine is an external module copied during Docker builds
 asp-js-engine
+
+# Ignore monguard directory due to not being part of regular build
+monguard
