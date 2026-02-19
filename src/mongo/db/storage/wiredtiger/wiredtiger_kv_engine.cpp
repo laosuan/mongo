@@ -3272,6 +3272,16 @@ WiredTigerKVEngineBase::WiredTigerConfig getWiredTigerConfigFromStartupOptions(
                       "parameter to set this value.");
     }
 
+    if (wtConfig.extraOpenOptions.find("checkpoint=") != std::string::npos) {
+        LOGV2_WARNING(
+            10781300,
+            "WiredTiger internal checkpointing is configured via the WiredTiger engine "
+            "configuration string. mongod runs its own periodic checkpointing thread, and "
+            "configuring `checkpoint=` in the WiredTiger config may result in two "
+            "independent checkpointing loops. Please remove `checkpoint=` from the "
+            "WiredTiger engine config string.");
+    }
+
     return wtConfig;
 }
 
