@@ -337,6 +337,31 @@ TEST_F(CollectionValidationTest, ValidateEnforceFastCount) {
                        {CollectionValidation::ValidateMode::kForegroundFullEnforceFastCount});
 }
 
+// Verify calling validate() with enforceFastSize=true.
+TEST_F(CollectionValidationTest, ValidateEnforceFastSize) {
+    auto opCtx = operationContext();
+    foregroundValidate(kNss,
+                       opCtx,
+                       {.valid = true,
+                        .numRecords = insertDataRange(opCtx, 0, 5),
+                        .numInvalidDocuments = 0,
+                        .numErrors = 0},
+                       {CollectionValidation::ValidateMode::kForegroundFullEnforceFastSize});
+}
+
+// Verify calling validate() with enforceFastCount=true and enforceFastSize=true.
+TEST_F(CollectionValidationTest, ValidateEnforceFastCountAndSize) {
+    auto opCtx = operationContext();
+    foregroundValidate(
+        kNss,
+        opCtx,
+        {.valid = true,
+         .numRecords = insertDataRange(opCtx, 0, 5),
+         .numInvalidDocuments = 0,
+         .numErrors = 0},
+        {CollectionValidation::ValidateMode::kForegroundFullEnforceFastCountAndSize});
+}
+
 TEST_F(CollectionValidationTest, ValidateCollectionDocumentSizeUserLimit) {
     auto opCtx = operationContext();
     foregroundValidate(kNss,
@@ -791,7 +816,7 @@ public:
                 },
                 "count" : 5
             },
-            "meta": {"ticker" : "MDB"}, 
+            "meta": {"ticker" : "MDB"},
             "data" : {
                 "_id" : {"$binary": "BwBpEgidgwL3sOyO70WAGwAAAAAAAAAA", "$type":"07"},
                 "date" : {"$binary": "CQAg6EDOfQEAAIEMTB0AAAAAAA4AAAAAAAAAAA==", "$type":"07"},

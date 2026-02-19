@@ -101,8 +101,8 @@ public:
     }
 
     /**
-     * Returns true if fast count is being validated, and the collection supports fast count.
-     * Certain internal collections are not supported by fast count.
+     * Returns true if fast count and/or size is being validated, and the collection supports fast
+     * count. Certain internal collections are not supported by fast count.
      */
     bool shouldEnforceFastCount() const;
 
