@@ -1516,7 +1516,7 @@ UpdateResult updateObjectByRid(OperationContext* opCtx,
                                const BSONElement& idField,
                                OplogApplication::Mode mode,
                                UpdateRequest request,
-                               bool recordPreImage,
+                               bool recordChangeStreamPreImage,
                                BSONObj& preImage) {
     const CollectionPtr& collPtr = coll.getCollectionPtr();
 
@@ -1527,7 +1527,25 @@ UpdateResult updateObjectByRid(OperationContext* opCtx,
     boost::optional<Record> record = cursor->seekExact(rid);
 
     if (!record.has_value()) {
-        invariant(!recordPreImage);
+        invariant(!recordChangeStreamPreImage || request.shouldReturnNewDocs());
+        if (mode == OplogApplication::Mode::kSecondary) {
+            const auto& opObj = redact(op.toBSONForLogging());
+            opCounters->gotUpdateOnMissingDoc();
+            logOplogConstraintViolation(opCtx,
+                                        op.getNss(),
+                                        OplogConstraintViolationEnum::kUpdateOnMissingDoc,
+                                        "update",
+                                        opObj,
+                                        boost::none /* status */);
+            // This error is always fatal regardless of steady state constraints. We throw an error
+            // here instead of deferring to the typical numMatched = 0 handling since this should
+            // be a fatal error for capped collections.
+            uasserted(
+                11902401,
+                fmt::format("While applying an oplog entry : '{}' during steady state replication "
+                            "to a replicated record id collection, the record was not found",
+                            opObj.toString()));
+        }
         return {false, /* existing */
                 false, /* modifiers */
                 0ULL,  /* numDocsModified */
@@ -1539,7 +1557,7 @@ UpdateResult updateObjectByRid(OperationContext* opCtx,
     auto obj = Snapshotted<BSONObj>(shard_role_details::getRecoveryUnit(opCtx)->getSnapshotId(),
                                     record->data.releaseToBson());
 
-    if (recordPreImage) {
+    if (recordChangeStreamPreImage && request.shouldReturnNewDocs()) {
         // Make a copy since obj needs to be used to perform the update.
         preImage = obj.value().copy();
     }
@@ -1615,7 +1633,8 @@ DeleteResult deleteObjectByRid(OperationContext* opCtx,
                                OpCounters* opCounters,
                                const BSONElement& idField,
                                OplogApplication::Mode mode,
-                               const DeleteRequest& request) {
+                               const DeleteRequest& request,
+                               bool recordChangeStreamPreImage) {
     const CollectionPtr& collPtr = coll.getCollectionPtr();
 
     DeleteResult result;
@@ -1625,7 +1644,30 @@ DeleteResult deleteObjectByRid(OperationContext* opCtx,
     bool foundPreImage = collPtr->findDoc(opCtx, rid, &preImage);
 
     if (!foundPreImage) {
+        invariant(!recordChangeStreamPreImage);
         // The record could not be found in the collection.
+        if (mode == OplogApplication::Mode::kSecondary) {
+            const auto& opObj = redact(op.toBSONForLogging());
+            opCounters->gotDeleteWasEmpty();
+            logOplogConstraintViolation(opCtx,
+                                        op.getNss(),
+                                        OplogConstraintViolationEnum::kDeleteWasEmpty,
+                                        "update",
+                                        opObj,
+                                        boost::none /* status */);
+            // This error is always fatal regardless of steady state constraints. We throw an error
+            // here instead of deferring to the typical nDeleted = 0 handling since this should
+            // be a fatal error for capped collections. We also don't need the special casing that
+            // allows no-op deletes on the change streams pre-images collection or
+            // config.image_collection.
+            // TODO SERVER-119691 Do we need these exceptions for change streams pre-images or
+            // config.image_collection.
+            uasserted(
+                11902400,
+                fmt::format("While applying an oplog entry : '{}' during steady state replication "
+                            "to a replicated record id collection, the record was not found",
+                            opObj.toString()));
+        }
         return {.nDeleted = 0};
     }
 
@@ -2324,8 +2366,6 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     }
 
                     UpdateResult ur = [&]() {
-                        bool recordPreImage =
-                            recordChangeStreamPreImage && request.shouldReturnNewDocs();
                         if (opRid.has_value()) {
                             // TODO SERVER-118695 Support upsert requests
                             request.setUpsert(false);
@@ -2336,9 +2376,11 @@ Status applyOperation_inlock(OperationContext* opCtx,
                                                      idField,
                                                      mode,
                                                      request,
-                                                     recordPreImage,
+                                                     recordChangeStreamPreImage,
                                                      changeStreamPreImage);
                         } else {
+                            bool recordPreImage =
+                                recordChangeStreamPreImage && request.shouldReturnNewDocs();
                             return updateObject(opCtx,
                                                 op,
                                                 collectionAcquisition,
@@ -2516,8 +2558,14 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     // and delete the document using the storage and collection APIs.
                     DeleteResult result;
                     if (opRid.has_value()) {
-                        result = deleteObjectByRid(
-                            opCtx, op, collectionAcquisition, opCounters, idField, mode, request);
+                        result = deleteObjectByRid(opCtx,
+                                                   op,
+                                                   collectionAcquisition,
+                                                   opCounters,
+                                                   idField,
+                                                   mode,
+                                                   request,
+                                                   recordChangeStreamPreImage);
                     } else {
                         // Run an Express delete by _id query.
                         result = deleteObject(opCtx, collectionAcquisition, request);
@@ -2563,6 +2611,8 @@ Status applyOperation_inlock(OperationContext* opCtx,
                                         "error"_attr = errMsg);
                         }
                     }
+                    // TODO SERVER-119664 Can we stop allowing no-op pre-images collection deletes
+                    // when replicated truncates are enabled?
                     // It is legal for a delete operation on the pre-images collection to delete
                     // zero documents - pre-image collections are not guaranteed to contain the same
                     // set of documents at all times. The same holds for change-collections as they
