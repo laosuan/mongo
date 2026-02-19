@@ -11,7 +11,6 @@ subset of Bazel syntax:
 import functools
 import os
 import re
-from typing import Dict, List
 
 
 class BazelParseError(Exception):
@@ -21,7 +20,7 @@ class BazelParseError(Exception):
 
 
 @functools.cache
-def parse_resmoke_suite_test(target_label: str) -> Dict[str, List[str]]:
+def parse_resmoke_suite_test(target_label: str) -> dict[str, list[str]]:
     """Parse a resmoke_suite_test target from BUILD.bazel.
     Args:
         target_label: Bazel target label like "//buildscripts/resmokeconfig:core"
@@ -121,7 +120,7 @@ def _parse_label(target_label: str) -> tuple[str, str]:
     return package, target_name
 
 
-def _parse_load_statements(content: str, package: str) -> Dict[str, str]:
+def _parse_load_statements(content: str, package: str) -> dict[str, str]:
     """Parse load statements from BUILD.bazel content.
 
     Extracts identifier to .bzl file mappings from load statements.
@@ -172,9 +171,9 @@ def _parse_load_statements(content: str, package: str) -> Dict[str, str]:
 def _extract_attribute(
     block: str,
     attribute_name: str,
-    identifier_to_bzl_file: Dict[str, str] = None,
+    identifier_to_bzl_file: dict[str, str] = None,
     build_file: str = None,
-) -> List[str]:
+) -> list[str]:
     """Extract an attribute from a BUILD.bazel rule block.
 
     Supports simple lists and list concatenation with identifiers:
@@ -232,8 +231,8 @@ def _extract_attribute(
 
 
 def _resolve_identifier_to_labels(
-    identifier: str, identifier_to_bzl_file: Dict[str, str], build_file: str = None
-) -> List[str]:
+    identifier: str, identifier_to_bzl_file: dict[str, str], build_file: str = None
+) -> list[str]:
     """Convert a Bazel identifier to a list of labels.
 
     This function resolves identifiers used in list concatenation expressions.

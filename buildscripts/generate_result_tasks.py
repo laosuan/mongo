@@ -20,7 +20,7 @@ import os
 import subprocess
 import sys
 from functools import cache
-from typing import List, Optional
+from typing import Optional
 
 import runfiles
 import typer
@@ -131,7 +131,7 @@ def resolve_codeowners() -> dict[str, list[str]]:
         return {}
 
 
-def query_targets() -> List[str]:
+def query_targets() -> list[str]:
     try:
         result = subprocess.run(
             ["bazel", "query", RESMOKE_TEST_QUERY],

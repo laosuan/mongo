@@ -27,7 +27,7 @@ import re
 import subprocess
 import sys
 from functools import cache
-from typing import List, NamedTuple
+from typing import NamedTuple
 
 import typer
 import yaml
@@ -141,7 +141,7 @@ def get_resmoke_configs():
         return yaml.safe_load(f)
 
 
-def query_targets_to_burn_in(origin_rev: str) -> List[BurnInTargetInfo]:
+def query_targets_to_burn_in(origin_rev: str) -> list[BurnInTargetInfo]:
     change_detector = LocalFileChangeDetector(origin_rev)
     tests_changed = change_detector.find_changed_tests([Repo(".")])
 
@@ -183,7 +183,7 @@ def query_targets_to_burn_in(origin_rev: str) -> List[BurnInTargetInfo]:
 
 
 @cache
-def get_targets_with_tag(tag: str) -> List[str]:
+def get_targets_with_tag(tag: str) -> list[str]:
     try:
         query = f"attr(tags, '\\b{tag}(?![a-zA-Z0-9_-])', //...)"
         result = subprocess.run(
