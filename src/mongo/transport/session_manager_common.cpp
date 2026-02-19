@@ -51,10 +51,8 @@
 #include "mongo/transport/session.h"
 #include "mongo/transport/session_manager_common_gen.h"
 #include "mongo/transport/session_workflow.h"
-#include "mongo/transport/transport_options_gen.h"
 #include "mongo/util/observable_mutex.h"
 #include "mongo/util/observable_mutex_registry.h"
-#include "mongo/util/processinfo.h"
 
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kNetwork
 
@@ -104,20 +102,6 @@ bool quiet() {
     return serverGlobalParams.quiet.load();
 }
 
-boost::optional<std::size_t> calculateSafeConnectionLimit() {
-    invariant(gMemoryCapPercentageForPreAuthBuffers > 0 &&
-              gMemoryCapPercentageForPreAuthBuffers <= 100);
-    if (gMemoryCapPercentageForPreAuthBuffers == 100) {
-        return {};
-    }
-
-    const auto maxPreAuthBufferSizeBytes = gPreAuthMaximumMessageSizeBytes.load();
-    const auto totalMemoryBytes = ProcessInfo::getMemSizeBytes();
-    const auto maxMemoryForPreAuthBuffersBytes =
-        (totalMemoryBytes * gMemoryCapPercentageForPreAuthBuffers) / 100;
-
-    return maxMemoryForPreAuthBuffersBytes / maxPreAuthBufferSizeBytes;
-}
 
 /**
  * Limit maximum sessions to `serverGlobalParams.maxConns`.
@@ -153,15 +137,6 @@ std::size_t getSupportedMax() {
     if (supportedMax < serverGlobalParams.maxConns &&
         serverGlobalParams.maxConns != DEFAULT_MAX_CONN) {
         LOGV2(22941, " --maxConns too high", "limit"_attr = supportedMax);
-    }
-
-    const auto safeConnectionLimit = calculateSafeConnectionLimit();
-    if (safeConnectionLimit && *safeConnectionLimit < supportedMax) {
-        LOGV2_WARNING(
-            11621101,
-            "Overriding max connections to honor `capMemoryConsumptionForPreAuthBuffers` settings",
-            "limit"_attr = *safeConnectionLimit);
-        return *safeConnectionLimit;
     }
 
     return supportedMax;

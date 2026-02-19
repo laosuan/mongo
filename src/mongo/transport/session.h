@@ -121,14 +121,6 @@ public:
      */
     virtual void end() = 0;
 
-    void setRestrictedMode(bool mode) {
-        _restrictedMode = mode;
-    }
-
-    bool getRestrictedMode() const {
-        return _restrictedMode;
-    }
-
     /**
      * Source (receive) a new Message from the remote host for this Session.
      */
@@ -268,8 +260,6 @@ public:
 
 protected:
     Session();
-
-    bool _restrictedMode{false};
 
 private:
     const Id _id;

@@ -25,10 +25,7 @@ export function cleanUpDirectory(directoryPath) {
  * returned.
  */
 export function recordOperations(recordingDirGlobal, customRecordingDir, opsToRecord) {
-    const opts = {
-        auth: "",
-        setParameter: {trafficRecordingDirectory: recordingDirGlobal, preAuthMaximumMessageSizeBytes: 16777216},
-    };
+    const opts = {auth: "", setParameter: "trafficRecordingDirectory=" + recordingDirGlobal};
     const mongodInstance = MongoRunner.runMongod(opts);
 
     const adminDB = mongodInstance.getDB("admin");

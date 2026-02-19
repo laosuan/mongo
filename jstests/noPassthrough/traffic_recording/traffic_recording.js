@@ -9,11 +9,6 @@ function getDB(client) {
     return db;
 }
 
-function addPreAuth(params) {
-    params["preAuthMaximumMessageSizeBytes"] = 16 * 1024 * 1024;
-    return params;
-}
-
 function runTest(client, restartCommand) {
     let db = getDB(client);
 
@@ -124,10 +119,7 @@ function normalize(path) {
     removeFile(recordingDir);
     mkdir(recordingDir);
 
-    let m = MongoRunner.runMongod({
-        auth: "",
-        setParameter: addPreAuth({trafficRecordingDirectory: path, enableTestCommands: 1}),
-    });
+    let m = MongoRunner.runMongod({auth: "", setParameter: {trafficRecordingDirectory: path, enableTestCommands: 1}});
 
     let db = m.getDB("admin");
 

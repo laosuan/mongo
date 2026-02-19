@@ -47,7 +47,7 @@ public:
 
     StatusWith<std::size_t> decompressData(ConstDataRange input, DataRange output) override;
 
-    boost::optional<std::size_t> getMaxDecompressedSize(ConstDataRange input) override;
+    std::size_t getMaxDecompressedSize(const void* src, size_t srcSize);
 };
 
 

@@ -42,7 +42,6 @@
 #include <zlib.h>
 
 #include <boost/move/utility_core.hpp>
-#include <boost/none.hpp>
 
 namespace mongo {
 
@@ -50,10 +49,6 @@ ZlibMessageCompressor::ZlibMessageCompressor() : MessageCompressorBase(MessageCo
 
 std::size_t ZlibMessageCompressor::getMaxCompressedSize(size_t inputSize) {
     return ::compressBound(inputSize);
-}
-
-boost::optional<std::size_t> ZlibMessageCompressor::getMaxDecompressedSize(ConstDataRange input) {
-    return boost::none;
 }
 
 StatusWith<std::size_t> ZlibMessageCompressor::compressData(ConstDataRange input,
