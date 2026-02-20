@@ -114,7 +114,7 @@ public:
     /**
      * Specifies whether the provided exec agg stage was allocated by the host.
      *
-     * Since ExtensionExecAggStage and HostExecAggStageAdapter implement the same
+     * Since ExtensionExecAggStageAdapter and HostExecAggStageAdapter implement the same
      * vtable, this function is necessary for differentiating between host- and extension-allocated
      * exec agg stages.
      *

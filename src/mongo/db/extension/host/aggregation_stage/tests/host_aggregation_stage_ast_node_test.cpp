@@ -76,10 +76,10 @@ TEST(HostAstNodeTest, GetSpec) {
 
     // Get BSON spec through handle.
     DocumentSourceIdLookupSpec spec2;
-    auto noOpAstNode = new host::HostAggStageAstNode(
+    auto noOpAstNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec2)));
     auto handle = AggStageAstNodeHandle{noOpAstNode};
-    ASSERT_TRUE(static_cast<host::HostAggStageAstNode*>(handle.get())
+    ASSERT_TRUE(static_cast<host::HostAggStageAstNodeAdapter*>(handle.get())
                     ->getIdLookupSpec()
                     .toBSON()
                     .binaryEqual(expectedBSON));
@@ -88,34 +88,35 @@ TEST(HostAstNodeTest, GetSpec) {
 TEST(HostAstNodeTest, IsHostAllocated) {
     DocumentSourceIdLookupSpec spec;
 
-    auto noOpAstNode = new host::HostAggStageAstNode(
+    auto noOpAstNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{noOpAstNode};
 
-    ASSERT_TRUE(host::HostAggStageAstNode::isHostAllocated(*handle.get()));
+    ASSERT_TRUE(host::HostAggStageAstNodeAdapter::isHostAllocated(*handle.get()));
 }
 
 TEST(HostAstNodeTest, IsNotHostAllocated) {
-    auto noOpExtensionAstNode = new sdk::ExtensionAggStageAstNode(NoOpExtensionAstNode::make());
+    auto noOpExtensionAstNode =
+        new sdk::ExtensionAggStageAstNodeAdapter(NoOpExtensionAstNode::make());
     auto handle = AggStageAstNodeHandle{noOpExtensionAstNode};
 
-    ASSERT_FALSE(host::HostAggStageAstNode::isHostAllocated(*handle.get()));
+    ASSERT_FALSE(host::HostAggStageAstNodeAdapter::isHostAllocated(*handle.get()));
 }
 
 DEATH_TEST(HostAstNodeVTableTestDeathTest, InvalidAstNodeVTableFailsGetName, "11217601") {
-    auto vtable = host::HostAggStageAstNode::getVTable();
+    auto vtable = host::HostAggStageAstNodeAdapter::getVTable();
     vtable.get_name = nullptr;
     AggStageAstNodeAPI::assertVTableConstraints(vtable);
 }
 
 DEATH_TEST(HostAstNodeVTableTestDeathTest, InvalidAstNodeVTableFailsGetProperties, "11347800") {
-    auto vtable = host::HostAggStageAstNode::getVTable();
+    auto vtable = host::HostAggStageAstNodeAdapter::getVTable();
     vtable.get_properties = nullptr;
     AggStageAstNodeAPI::assertVTableConstraints(vtable);
 }
 
 DEATH_TEST(HostAstNodeVTableTestDeathTest, InvalidAstNodeVTableFailsBind, "11113700") {
-    auto vtable = host::HostAggStageAstNode::getVTable();
+    auto vtable = host::HostAggStageAstNodeAdapter::getVTable();
     vtable.bind = nullptr;
     AggStageAstNodeAPI::assertVTableConstraints(vtable);
 }
@@ -123,19 +124,19 @@ DEATH_TEST(HostAstNodeVTableTestDeathTest, InvalidAstNodeVTableFailsBind, "11113
 DEATH_TEST(HostAstNodeVTableTestDeathTest,
            InvalidAstNodeVTableFailsGetFirstStageViewApplicationPolicy,
            "11507400") {
-    auto vtable = host::HostAggStageAstNode::getVTable();
+    auto vtable = host::HostAggStageAstNodeAdapter::getVTable();
     vtable.get_first_stage_view_application_policy = nullptr;
     AggStageAstNodeAPI::assertVTableConstraints(vtable);
 }
 
 DEATH_TEST(HostAstNodeVTableTestDeathTest, InvalidAstNodeVTableFailsBindViewInfo, "11507500") {
-    auto vtable = host::HostAggStageAstNode::getVTable();
+    auto vtable = host::HostAggStageAstNodeAdapter::getVTable();
     vtable.bind_view_info = nullptr;
     AggStageAstNodeAPI::assertVTableConstraints(vtable);
 }
 
 DEATH_TEST(HostAstNodeTestDeathTest, HostGetPropertiesUnimplemented, "11347801") {
-    auto noOpAstNode = new host::HostAggStageAstNode(NoOpHostAstNode::make({}));
+    auto noOpAstNode = new host::HostAggStageAstNodeAdapter(NoOpHostAstNode::make({}));
     auto handle = AggStageAstNodeHandle{noOpAstNode};
 
     ::MongoExtensionByteBuf** buf = nullptr;
@@ -143,7 +144,7 @@ DEATH_TEST(HostAstNodeTestDeathTest, HostGetPropertiesUnimplemented, "11347801")
 }
 
 DEATH_TEST(HostAstNodeTestDeathTest, HostBindUnimplemented, "11133600") {
-    auto noOpAstNode = new host::HostAggStageAstNode(NoOpHostAstNode::make({}));
+    auto noOpAstNode = new host::HostAggStageAstNodeAdapter(NoOpHostAstNode::make({}));
     auto handle = AggStageAstNodeHandle{noOpAstNode};
 
     ::MongoExtensionLogicalAggStage** bind = nullptr;
@@ -154,7 +155,7 @@ TEST(HostAstNodeCloneTest, CloneHostAllocatedAstNodePreservesSpec) {
     DocumentSourceIdLookupSpec spec;
     auto expectedBSON = spec.toBSON();
 
-    auto astNode = new host::HostAggStageAstNode(
+    auto astNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{astNode};
 
@@ -162,9 +163,9 @@ TEST(HostAstNodeCloneTest, CloneHostAllocatedAstNodePreservesSpec) {
     auto clonedHandle = handle->clone();
 
     // Verify the clone has the same spec and name.
-    ASSERT_TRUE(host::HostAggStageAstNode::isHostAllocated(*clonedHandle.get()));
+    ASSERT_TRUE(host::HostAggStageAstNodeAdapter::isHostAllocated(*clonedHandle.get()));
     // getIdLookupSpec().toBSON() returns the inner spec, not the full stage BSON.
-    ASSERT_TRUE(static_cast<host::HostAggStageAstNode*>(clonedHandle.get())
+    ASSERT_TRUE(static_cast<host::HostAggStageAstNodeAdapter*>(clonedHandle.get())
                     ->getIdLookupSpec()
                     .toBSON()
                     .binaryEqual(expectedBSON));
@@ -174,7 +175,7 @@ TEST(HostAstNodeCloneTest, CloneHostAllocatedAstNodePreservesSpec) {
 TEST(HostAstNodeCloneTest, CloneHostAllocatedAstNodeIsIndependent) {
     DocumentSourceIdLookupSpec spec;
 
-    auto astNode = new host::HostAggStageAstNode(
+    auto astNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{astNode};
 
@@ -197,7 +198,7 @@ TEST(HostAstNodeCloneTest, ClonedAstNodeSurvivesOriginalDestruction) {
     {
         DocumentSourceIdLookupSpec spec;
 
-        auto astNode = new host::HostAggStageAstNode(
+        auto astNode = new host::HostAggStageAstNodeAdapter(
             NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
         auto handle = AggStageAstNodeHandle{astNode};
 
@@ -207,9 +208,9 @@ TEST(HostAstNodeCloneTest, ClonedAstNodeSurvivesOriginalDestruction) {
 
     // Cloned handle should still be valid and contain the correct spec.
     ASSERT_TRUE(clonedHandle.isValid());
-    ASSERT_TRUE(host::HostAggStageAstNode::isHostAllocated(*clonedHandle.get()));
+    ASSERT_TRUE(host::HostAggStageAstNodeAdapter::isHostAllocated(*clonedHandle.get()));
     // getIdLookupSpec().toBSON() returns the inner spec, not the full stage BSON.
-    ASSERT_TRUE(static_cast<host::HostAggStageAstNode*>(clonedHandle.get())
+    ASSERT_TRUE(static_cast<host::HostAggStageAstNodeAdapter*>(clonedHandle.get())
                     ->getIdLookupSpec()
                     .toBSON()
                     .binaryEqual(expectedBSON));
@@ -218,7 +219,7 @@ TEST(HostAstNodeCloneTest, ClonedAstNodeSurvivesOriginalDestruction) {
 TEST(HostAstNodeCloneTest, MultipleCloneAreIndependent) {
     DocumentSourceIdLookupSpec spec;
 
-    auto astNode = new host::HostAggStageAstNode(
+    auto astNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{astNode};
 
@@ -246,7 +247,7 @@ DEATH_TEST(HostAstNodeViewPolicyTest,
            "11507401") {
     DocumentSourceIdLookupSpec spec;
 
-    auto astNode = new host::HostAggStageAstNode(
+    auto astNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{astNode};
     handle->getFirstStageViewApplicationPolicy();
@@ -255,7 +256,7 @@ DEATH_TEST(HostAstNodeViewPolicyTest,
 DEATH_TEST(HostAstNodeViewInfoTest, HostAstNodeCannotBindViewInfo, "11507501") {
     DocumentSourceIdLookupSpec spec;
 
-    auto astNode = new host::HostAggStageAstNode(
+    auto astNode = new host::HostAggStageAstNodeAdapter(
         NoOpHostAstNode::make(std::make_unique<mongo::LiteParsedInternalSearchIdLookUp>(spec)));
     auto handle = AggStageAstNodeHandle{astNode};
 
