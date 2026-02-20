@@ -1313,7 +1313,7 @@ void ValidateAdaptor::traverseRecordStore(OperationContext* opCtx,
                                           << " invalid documents.");
     }
 
-    if (_validateState->shouldEnforceFastCount()) {
+    if (_validateState->shouldEnforceFastCount(opCtx)) {
         const auto fastCountType = _validateState->getDetectedFastCountType(opCtx);
         const bool enforceCount = _validateState->enforceFastCountRequested();
         const bool enforceSize = _validateState->enforceFastSizeRequested();

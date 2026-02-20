@@ -35,6 +35,7 @@
 #include "mongo/db/index_names.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/repl/intent_registry.h"
+#include "mongo/db/server_feature_flags_gen.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/shard_role/shard_catalog/collection.h"
 #include "mongo/db/shard_role/shard_catalog/collection_catalog.h"
@@ -124,7 +125,7 @@ ValidateState::ValidateState(OperationContext* opCtx,
     // kForegroundFullEnforceFast[Count|Size|CountAndSize].
     if (fixErrors()) {
         invariant(!isBackground());
-        invariant(!shouldEnforceFastCount());
+        invariant(!shouldEnforceFastCount(opCtx));
     }
 
     if (adjustMultikey()) {
@@ -155,7 +156,7 @@ Status ValidateState::_checkUnreplicatedFastCountCollectionExists(OperationConte
     return Status::OK();
 }
 
-bool ValidateState::shouldEnforceFastCount() const {
+bool ValidateState::shouldEnforceFastCount(OperationContext* opCtx) const {
     if (enforceFastCountRequested() || enforceFastSizeRequested()) {
         if (_nss.isOplog() || _nss.isChangeStreamPreImagesCollection()) {
             // Oplog writers only take a global IX lock, so the oplog can still be written to even
@@ -180,6 +181,12 @@ bool ValidateState::shouldEnforceFastCount() const {
             // for internal bookkeeping for retryable writes. Replication rollback won't adjust the
             // size storer counts for the 'config.image_collection' collection. We therefore do not
             // enforce fast count on it.
+            return false;
+        } else if (gFeatureFlagReplicatedFastCount.isEnabledUseLatestFCVWhenUninitialized(
+                       VersionContext::getDecoration(opCtx),
+                       serverGlobalParams.featureCompatibility.acquireFCVSnapshot()) &&
+                   _nss.isOnInternalDb()) {
+            // SERVER-119984 TODO: Revisit this, enforce if possible.
             return false;
         }
 

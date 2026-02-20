@@ -103,8 +103,9 @@ public:
     /**
      * Returns true if fast count and/or size is being validated, and the collection supports fast
      * count. Certain internal collections are not supported by fast count.
+     * TODO SERVER-117326: Remove 'opCtx' parameter.
      */
-    bool shouldEnforceFastCount() const;
+    bool shouldEnforceFastCount(OperationContext* opCtx) const;
 
     FastCountType getDetectedFastCountType(OperationContext* opCtx) const;
 
