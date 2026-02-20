@@ -64,10 +64,16 @@ JoinCostEstimate JoinCostEstimatorImpl::costIndexScanFragment(NodeId nodeId) {
     CardinalityEstimate numDocsOutput = numDocsProcessed;
     // Assume that the sequential IO performed by scanning the index itself is negilible.
     CardinalityEstimate numSeqIOs = zeroCE;
-    // Model the random IO performed by fetching documents from the collection. For simplicity,
-    // assume that every index entry causes us to read a new page from the collection.
-    // TODO SERVER-119780: Use Mackert-Lohman formula
-    CardinalityEstimate numRandIOs = numDocsOutput;
+    // Model the random IO performed by fetching documents from the collection. This works for both
+    // multikey and non-multikey indexes. In both cases, 'numDocsOutput' represents the number of
+    // documents this plan fragment returns. In the multikey case, we just ignore the cost of
+    // deduplicating RIDs as part of the index scan.
+    auto& collStats = _jCtx.catStats.collStats.at(_jCtx.joinGraph.getNode(nodeId).collectionName);
+    double numPagesColl = collStats.logicalDataSizeBytes / collStats.pageSizeBytes;
+    CardinalityEstimate numRandIOs = CardinalityEstimate{
+        CardinalityType{estimateMackertLohmanRandIO(
+            numPagesColl, _jCtx.catStats.numPagesInStorageEngineCache, numDocsOutput.toDouble())},
+        EstimationSource::Sampling};
     return JoinCostEstimate(numDocsProcessed, numDocsOutput, numSeqIOs, numRandIOs);
 }
 
@@ -218,7 +224,8 @@ JoinCostEstimate JoinCostEstimatorImpl::costBaseCollectionAccess(NodeId baseNode
 double estimateMackertLohmanRandIO(double numPagesColl,
                                    double numPagesInStorageEngineCache,
                                    double numDocsOutput) {
-    tassert(11943801, "estimateMackertLohmanRandIO() expected numPagesColl > 0", numPagesColl > 0);
+    tassert(
+        11943801, "estimateMackertLohmanRandIO() expected numPagesColl >= 0", numPagesColl >= 0);
     tassert(11943802,
             "estimateMackertLohmanRandIO() expected numPagesInStorageEngineCache > 0",
             numPagesInStorageEngineCache > 0);
