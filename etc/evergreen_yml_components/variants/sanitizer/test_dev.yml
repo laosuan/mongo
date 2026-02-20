@@ -564,6 +564,7 @@ buildvariants:
       san_options: *aubsan_options
       bazel_compile_flags: >-
         --config=dbg_aubsan
+        --linkstatic=True
         --opt=on
         --fission=no
         --fsan=True
