@@ -96,6 +96,8 @@ include:
 
   - filename: src/mongo/db/modules/atlas/atlas_dev.yml
 
+  - filename: monguard/.evergreen/config.yml
+
 parameters:
   - key: evergreen_config_file_path
     value: "etc/evergreen.yml"
@@ -132,6 +134,10 @@ github_pr_aliases:
     task_tags: ["benchmarks_sep"]
   - variant: "^(commit-queue-monorepo)$"
     task: ".*"
+    variant_tags: []
+    task_tags: []
+  - variant: "^(amazon-linux2023-arm|Lint)$"
+    task: "^(.*)$"
     variant_tags: []
     task_tags: []
 
