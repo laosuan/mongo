@@ -364,7 +364,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
             with open(sky_path, "w") as f:
                 f.write(
                     f'{sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE} = "master"\n'
-                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit)\n'
+                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")\n'
                 )
             sync_repo_with_copybara.pin_prod_workflow_ref_to_commit(sky_path, "abc123")
             with open(sky_path, "r") as f:
@@ -380,7 +380,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
                 f.write(
                     f"""
                     {sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE} = "oldsha"
-                    make_workflow("prod", prodUrl, {sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE})
+                    make_workflow("prod", prodUrl, {sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE}, "master")
                     """
                 )
             sync_repo_with_copybara.pin_prod_workflow_ref_to_commit(sky_path, "newsha")
@@ -396,7 +396,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             sky_path = os.path.join(tmpdir, "copy.bara.sky")
             with open(sky_path, "w") as f:
-                f.write('make_workflow("prod", prodUrl, "master")')
+                f.write('make_workflow("prod", prodUrl, "master", "master")')
             with self.assertRaises(SystemExit):
                 sync_repo_with_copybara.pin_prod_workflow_ref_to_commit(sky_path, "abc123")
 
@@ -406,7 +406,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
             with open(sky_path, "w") as f:
                 f.write(
                     f'{sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE} = "v8.0"\n'
-                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit)\n'
+                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")\n'
                 )
 
             pinned_ref = sync_repo_with_copybara.get_prod_pinned_source_ref(sky_path)
@@ -416,7 +416,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             sky_path = os.path.join(tmpdir, "copy.bara.sky")
             with open(sky_path, "w") as f:
-                f.write('make_workflow("prod", prodUrl, "master")')
+                f.write('make_workflow("prod", prodUrl, "master", "master")')
 
             with self.assertRaises(SystemExit):
                 sync_repo_with_copybara.get_prod_pinned_source_ref(sky_path)
@@ -429,7 +429,7 @@ class TestSkyExclusionChecks(unittest.TestCase):
             with open(sky_path, "w") as f:
                 f.write(
                     f'{sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE} = "v8.0"\n'
-                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit)\n'
+                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")\n'
                 )
 
             mock_run_command.side_effect = [
@@ -452,6 +452,41 @@ class TestSkyExclusionChecks(unittest.TestCase):
                 "git --no-pager show deadbeef123:copy.bara.sky",
             )
             mock_pin_ref.assert_called_once_with(config_file, "deadbeef123")
+
+    @patch("buildscripts.sync_repo_with_copybara.run_command")
+    def test_get_prod_copybara_config_keeps_destination_on_original_prod_ref(
+        self, mock_run_command
+    ):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sky_path = os.path.join(tmpdir, "copy.bara.sky")
+            with open(sky_path, "w") as f:
+                f.write(
+                    f'{sync_repo_with_copybara.PROD_PINNED_REF_VARIABLE} = "master"\n'
+                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")\n'
+                )
+
+            mock_run_command.side_effect = [
+                "",
+                "deadbeef123\n",
+                (
+                    'prodRefForPinnedSourceCommit = "master"\n'
+                    'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")\n'
+                ),
+            ]
+
+            config_file = sync_repo_with_copybara.get_prod_copybara_config_from_master(tmpdir)
+
+            with open(config_file, "r") as f:
+                generated_config = f.read()
+
+            self.assertIn(
+                'prodRefForPinnedSourceCommit = "deadbeef123"',
+                generated_config,
+            )
+            self.assertIn(
+                'make_workflow("prod", prodUrl, prodRefForPinnedSourceCommit, "master")',
+                generated_config,
+            )
 
 
 if __name__ == "__main__":
