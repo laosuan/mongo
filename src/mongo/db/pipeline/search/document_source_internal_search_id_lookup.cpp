@@ -51,6 +51,9 @@ DocumentSourceContainer _internalSearchIdLookupStageParamsToDocumentSourceFn(
     const std::unique_ptr<StageParams>& stageParams,
     const boost::intrusive_ptr<ExpressionContext>& expCtx) {
     const auto* typedParams = dynamic_cast<InternalSearchIdLookupStageParams*>(stageParams.get());
+    tassert(11993200,
+            "Expected InternalSearchIdLookupStageParams for _internalSearchIdLookup stage",
+            typedParams != nullptr);
     return {make_intrusive<DocumentSourceInternalSearchIdLookUp>(std::move(typedParams->ownedSpec),
                                                                  expCtx)};
 }
