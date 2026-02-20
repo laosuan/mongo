@@ -884,14 +884,19 @@ public:
 
     static constexpr auto replacementIncorrectTimeField = "t"_sd;
 
-    void insertDoc(BSONObj doc, ErrorCodes::Error expected = ErrorCodes::OK) {
+    void insertDocs(std::span<const BSONObj> docs, ErrorCodes::Error expected = ErrorCodes::OK) {
         ASSERT_OK(storageInterface()->createCollection(_opCtx, _nss, _options));
         WriteUnitOfWork wuow(_opCtx);
         const AutoGetCollection coll(_opCtx, _nss, MODE_IX);
         ASSERT_TRUE(coll->isTimeseriesCollection());
-        EXPECT_EQ(expected, Helpers::insert(_opCtx, *coll, doc));
+        EXPECT_EQ(expected, Helpers::insert(_opCtx, *coll, docs));
         wuow.commit();
     }
+
+    void insertDoc(BSONObj doc, ErrorCodes::Error expected = ErrorCodes::OK) {
+        insertDocs(std::array{doc}, expected);
+    }
+
 
     static BSONObj getSampleDocMismatchedMeasurementField(StringData measurementField) {
         const auto origBson = getSampleDoc();
@@ -945,6 +950,7 @@ TEST_P(TimeseriesCollectionValidationValidBucketsTest, TimeseriesValidationGoodD
     {
         WriteUnitOfWork wuow(_opCtx);
         AutoGetCollection coll(_opCtx, _nss, MODE_IX);
+        coll->setRequiresTimeseriesExtendedRangeSupport(_opCtx);
         ASSERT_TRUE(coll->isTimeseriesCollection());
         ASSERT_OK(Helpers::insert(_opCtx, *coll, bson));
         wuow.commit();
@@ -1314,8 +1320,8 @@ TEST_P(TimeseriesCollectionValidationSchemaViolationTest,
 }
 
 TEST_F(TimeseriesCollectionValidationTest, MayRequireExtendedRangeSupportExpectTrue) {
-    const auto doc = getExtendedTimeRangeSampleDoc();
-    insertDoc(doc);
+    const auto docs = std::array{getExtendedTimeRangeSampleDoc(), getSampleDoc()};
+    insertDocs(docs);
     const auto* coll = CollectionCatalog::get(_opCtx)->lookupCollectionByNamespace(_opCtx, _nss);
     ASSERT_NE(coll, nullptr);
     EXPECT_TRUE(timeseries::collectionMayRequireExtendedRangeSupport(_opCtx, *coll));
@@ -1327,6 +1333,17 @@ TEST_F(TimeseriesCollectionValidationTest, MayRequireExtendedRangeSupportExpectF
     const auto* coll = CollectionCatalog::get(_opCtx)->lookupCollectionByNamespace(_opCtx, _nss);
     ASSERT_NE(coll, nullptr);
     EXPECT_FALSE(timeseries::collectionMayRequireExtendedRangeSupport(_opCtx, *coll));
+}
+
+TEST_F(TimeseriesCollectionValidationTest, ReportErrorsInExtendedRangeBookkeeping) {
+    const auto doc = getExtendedTimeRangeSampleDoc();
+    insertDoc(doc);
+    {
+        const AutoGetCollection coll(_opCtx, _nss, MODE_IS);
+        EXPECT_FALSE(coll->getRequiresTimeseriesExtendedRangeSupport());
+    }
+    foregroundValidate(
+        _nss, _opCtx, {.valid = true, .numRecords = 1, .numErrors = 0, .numWarnings = 1});
 }
 
 }  // namespace
