@@ -1,8 +1,6 @@
 /**
  * This test checks that search indexes cannot be created on view definitions that violate
  * constraints. See db/query/search/search_index_view_validation.h for more details.
- *
- * @tags: [ featureFlagExtensionsAPI ]
  */
 const invalidStageErrorCode = 10623000;
 const matchErrorCode = 10623001;
@@ -53,23 +51,7 @@ testSearchIndexOnInvalidView({name: "search_index_search_view", pipeline: [{$sea
 testSearchIndexOnInvalidView({
     name: "search_index_project_view",
     pipeline: [{$project: {abc: 1}}],
-    errorCode: invalidStageErrorCode,
-});
-
-testSearchIndexOnInvalidView({
-    // Test with an extension that desugars into $addFields and $match (allowed stages).
-    // This should fail as we do not desugar before making CRUD operations on search indexes.
-    name: "search_index_addFields_match_extension",
-    pipeline: [
-        {
-            $addFieldsMatch: {
-                field: "apple",
-                value: "banana",
-                filter: "grape",
-            },
-        },
-    ],
-    errorCode: invalidStageErrorCode,
+    errorCode: 10623000,
 });
 
 // ===============================================================================
