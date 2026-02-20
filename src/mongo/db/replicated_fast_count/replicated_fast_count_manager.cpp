@@ -62,7 +62,7 @@ void ReplicatedFastCountManager::startup(OperationContext* opCtx) {
             "started up once.",
             !_backgroundThread.joinable());
     {
-        auto acquisition = _acquireFastCountCollection(opCtx);
+        auto acquisition = _acquireFastCountCollectionForWrite(opCtx);
 
         uassert(
             11718600, "Expected fastcount collection to exist on startup", acquisition.has_value());
@@ -103,7 +103,7 @@ void ReplicatedFastCountManager::shutdown() {
         _isDisabled.storeRelaxed(true);
     }
 
-    _condVar.notify_all();
+    _backgroundThreadReadyForFlush.notify_all();
 
     if (_backgroundThread.joinable()) {
         _backgroundThread.join();
@@ -145,14 +145,28 @@ CollectionSizeCount ReplicatedFastCountManager::find(const UUID& uuid) const {
     return {};
 }
 
-void ReplicatedFastCountManager::flush(OperationContext* opCtx) {
+void ReplicatedFastCountManager::flushAsync(OperationContext* opCtx) {
+    _backgroundThreadReadyForFlush.notify_all();
+}
+
+void ReplicatedFastCountManager::flushSync_ForTest(OperationContext* opCtx) {
+    _snapshotAndFlush(opCtx);
+}
+
+void ReplicatedFastCountManager::disablePeriodicWrites_ForTest() {
+    invariant(!_backgroundThread.joinable(),
+              "Background thread started running before disabling periodic metadata writes");
+    _writeMetadataPeriodically = false;
+}
+
+void ReplicatedFastCountManager::_snapshotAndFlush(OperationContext* opCtx) {
     const absl::flat_hash_map<UUID, StoredSizeCount> dirtyMetadata = _getSnapshotOfDirtyMetadata();
 
     if (MONGO_unlikely(hangAfterReplicatedFastCountSnapshot.shouldFail())) {
         hangAfterReplicatedFastCountSnapshot.pauseWhileSet();
     }
 
-    auto acquisition = _acquireFastCountCollection(opCtx);
+    auto acquisition = _acquireFastCountCollectionForWrite(opCtx);
     uassert(ErrorCodes::NamespaceNotFound, "Expected fastcount collection to exist", acquisition);
 
     const CollectionPtr& fastCountColl = acquisition->getCollectionPtr();
@@ -168,12 +182,6 @@ void ReplicatedFastCountManager::flush(OperationContext* opCtx) {
                       "Failed to persist collection sizeCount metadata",
                       "error"_attr = ex.toStatus());
     }
-}
-
-void ReplicatedFastCountManager::disablePeriodicWrites_ForTest() {
-    invariant(!_backgroundThread.joinable(),
-              "Background thread started running before disabling periodic metadata writes");
-    _writeMetadataPeriodically = false;
 }
 
 absl::flat_hash_map<UUID, ReplicatedFastCountManager::StoredSizeCount>
@@ -227,7 +235,7 @@ void ReplicatedFastCountManager::_runBackgroundThreadOnTimer(OperationContext* o
         {
             stdx::unique_lock lock(_metadataMutex);
             // TODO SERVER-117515: We want to signal this from checkpoint thread
-            _condVar.wait_for(
+            _backgroundThreadReadyForFlush.wait_for(
                 lock, stdx::chrono::seconds(1), [this] { return _isDisabled.loadRelaxed(); });
 
             if (_isDisabled.loadRelaxed()) {
@@ -236,7 +244,7 @@ void ReplicatedFastCountManager::_runBackgroundThreadOnTimer(OperationContext* o
         }
 
         try {
-            flush(opCtx);
+            _snapshotAndFlush(opCtx);
         } catch (const DBException& ex) {
             if (ex.code() == ErrorCodes::InterruptedDueToReplStateChange &&
                 !_isDisabled.loadRelaxed()) {
@@ -312,7 +320,7 @@ void ReplicatedFastCountManager::_insertOneMetadata(OperationContext* opCtx,
 }
 
 boost::optional<CollectionOrViewAcquisition>
-ReplicatedFastCountManager::_acquireFastCountCollection(OperationContext* opCtx) {
+ReplicatedFastCountManager::_acquireFastCountCollectionForWrite(OperationContext* opCtx) {
     CollectionOrViewAcquisition acquisition =
         acquireCollectionOrView(opCtx,
                                 CollectionOrViewAcquisitionRequest::fromOpCtx(

@@ -63,7 +63,7 @@ protected:
         _fastCountManager = &ReplicatedFastCountManager::get(_opCtx->getServiceContext());
         // Allow for control over when we write to our internal collection for testing. We only
         // write to the internal collection when we explicitly call
-        // ReplicatedFastCountManager::flush().
+        // ReplicatedFastCountManager::flushSync_ForTest().
         _fastCountManager->disablePeriodicWrites_ForTest();
         _fastCountManager->startup(_opCtx);
 
@@ -234,7 +234,7 @@ TEST_F(ReplicatedFastCountTest, DirtyMetadataWrittenToInternalCollection) {
         /*expectedSize=*/0);
 
     // Manually trigger an iteration to write dirty metadata to the internal collection.
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     replicated_fast_count_test_helpers::checkFastCountMetadataInInternalCollection(
         _opCtx,
@@ -274,7 +274,7 @@ TEST_F(ReplicatedFastCountTest, DirtyMetadataWrittenAsSingleApplyOpsEntry) {
                                                    docGeneratorForInsert,
                                                    sampleDocForInsert);
 
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     auto applyOpsEntries =
         replicated_fast_count_test_helpers::getApplyOpsForNss(_opCtx, replicatedFastCountStoreNss);
@@ -321,7 +321,7 @@ TEST_F(ReplicatedFastCountTest, UpdatesWrittenToApplyOpsCorrectly) {
                                                    docGeneratorForInsert,
                                                    sampleDocForInsert);
 
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     // Now, dirty metadata for the same collections, and check that an applyOps entry with the
     // correct update information is generated.
@@ -359,7 +359,7 @@ TEST_F(ReplicatedFastCountTest, UpdatesWrittenToApplyOpsCorrectly) {
                                                    sampleDocForUpdate);
 
     // Write to the internal collection again, this time recording the updates.
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     auto applyOpsEntry = replicated_fast_count_test_helpers::getLatestApplyOpsForNss(
         _opCtx, replicatedFastCountStoreNss);
@@ -400,7 +400,7 @@ TEST_F(ReplicatedFastCountTest, MixedUpdatesAndInsertInApplyOps) {
                                                    docGeneratorForInsert,
                                                    sampleDocForInsert);
 
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     replicated_fast_count_test_helpers::insertDocs(_opCtx,
                                                    _fastCountManager,
@@ -427,7 +427,7 @@ TEST_F(ReplicatedFastCountTest, MixedUpdatesAndInsertInApplyOps) {
                                                    sampleDocForInsert,
                                                    sampleDocForUpdate);
 
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     auto applyOpsEntry = replicated_fast_count_test_helpers::getLatestApplyOpsForNss(
         _opCtx, replicatedFastCountStoreNss);
@@ -559,7 +559,7 @@ TEST_F(ReplicatedFastCountTest, DirtyWriteNotLostIfWrittenAfterMetadataSnapshot)
             // Hang after we make a copy of the _metadata map which should include our initial
             // inserts to the collection, but before we actually write to disk and change our dirty
             // flag for the collection we wrote to.
-            _fastCountManager->flush(opCtxForThread);
+            _fastCountManager->flushSync_ForTest(opCtxForThread);
         });
 
         fp->waitForTimesEntered(initialTimesEntered + 1);
@@ -586,7 +586,7 @@ TEST_F(ReplicatedFastCountTest, DirtyWriteNotLostIfWrittenAfterMetadataSnapshot)
 
     // If the dirty metadata wasn't incorrectly cleared, this flush should persist our second batch
     // of inserts.
-    _fastCountManager->flush(_opCtx);
+    _fastCountManager->flushSync_ForTest(_opCtx);
 
     // Verify that all of our writes were persisted to disk.
     replicated_fast_count_test_helpers::checkFastCountMetadataInInternalCollection(
