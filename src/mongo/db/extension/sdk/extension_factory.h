@@ -118,7 +118,9 @@ private:
                 ->_extensionPointer->initialize(hostPortal);
         });
     }
-    static constexpr ::MongoExtensionVTable VTABLE{&_extInitialize};
+    static constexpr ::MongoExtensionVTable VTABLE = {
+        .initialize = &_extInitialize,
+    };
     std::unique_ptr<sdk::Extension> _extensionPointer;
 };
 

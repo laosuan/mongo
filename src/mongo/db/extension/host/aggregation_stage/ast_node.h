@@ -212,7 +212,7 @@ private:
         });
     }
 
-    static constexpr ::MongoExtensionAggStageAstNodeVTable VTABLE{
+    static constexpr ::MongoExtensionAggStageAstNodeVTable VTABLE = {
         .destroy = &_hostDestroy,
         .get_name = &_hostGetName,
         .get_properties = &_hostGetProperties,
